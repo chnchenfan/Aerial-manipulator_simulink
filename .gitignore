@@ -1,0 +1,7 @@
+tuning_results/
+*.asv
+*.slxc
+*.mex*
+slprj/
+*.log
+td_debug_log.txt

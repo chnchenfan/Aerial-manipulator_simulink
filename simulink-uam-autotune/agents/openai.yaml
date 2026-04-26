@@ -1,0 +1,4 @@
+interface:
+  display_name: "Simulink UAM Autotune"
+  short_description: "Tune the local Simulink aerial manipulator model with Codex-led search."
+  default_prompt: "Use $simulink-uam-autotune to tune AerialManipulatorSystem.slx until fresh mode 3 and mode 5 average position errors are below 0.05 m."
