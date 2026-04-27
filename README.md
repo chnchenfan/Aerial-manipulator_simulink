@@ -6,13 +6,20 @@ This repository contains a MATLAB/Simulink simulation project for an aerial mani
 
 The project models and evaluates an aerial manipulator with coupled quadrotor and arm dynamics. The simulation workflow is built around `AerialManipulatorSystem.slx` and MATLAB scripts that run repeatable experiment scenarios, collect logged signals, and compute tracking metrics.
 
-The current tuning target is to reduce the average spatial position tracking error:
+The current strict validation target is evaluated per translation axis:
 
 ```matlab
-mean(vecnorm(p_actual - p_desired, 2, 2))
+mean(abs(p_actual - p_desired), 1) < [0.02 0.02 0.02]
+max(abs(p_actual - p_desired), [], 1) < [0.04 0.04 0.04]
 ```
 
-The closed-loop autotuning goal is to drive both mode 3 and mode 5 fresh simulation runs below `0.05 m` average position error while preserving stability and arm tracking guardrails.
+The ESO position-state tracking guardrail is:
+
+```matlab
+max(abs(p_hat - p_true), [], 1) < [0.01 0.01 0.01]
+```
+
+The logged `h_v_true` / `h_v_est` channel is a disturbance-acceleration estimate in `m/s^2`, not a meter-valued position error.
 
 ## Repository Contents
 
@@ -55,13 +62,20 @@ summary = run_aerialmanipulator_tuning();
 
 ## Validation Scenarios
 
-The controller is validated with two representative scenarios. Both scenarios use the same primary metric:
+The controller is validated with two representative scenarios. Both scenarios use the same strict translational metrics:
 
 ```matlab
-position_mean_error_m = mean(vecnorm(p_actual - p_desired, 2, 2))
+position_axis_mean = mean(abs(p_actual - p_desired), 1)
+position_axis_max = max(abs(p_actual - p_desired), [], 1)
 ```
 
-The acceptance target is `position_mean_error_m < 0.05 m`. Arm tracking is monitored with a guardrail of `arm_axis_max < 0.10 rad`, and divergent runs are rejected.
+The acceptance target is every axis mean `< 0.02 m`, every axis max `< 0.04 m`, ESO position-state max `< 0.01 m`, `arm_axis_max < 0.10 rad`, and no divergent run.
+
+## Dynamics Model Audit
+
+The quadrotor translational and rotational dynamics in `sfunc_quadrotor_dynamics.m` follow the paper-level structure: rigid-body position/attitude dynamics plus manipulator coupling terms derived from center-of-mass motion and arm inertia. The ESO bug found during strict validation was not in the plant force equation; it was in `sfunc_position_eso.m`, where the model fed a world-frame force vector in Newtons directly into an ESO state equation that expected acceleration. The ESO now converts `f_world` to nominal acceleration with `f_world / (m_B + m_M) - g` and uses the disturbance compensation sign consistent with the position controller.
+
+The Delta arm dynamics in `sfunc_arm_dynamics.m` are not an exact reproduction of the paper object. They contain project-specific simplified/empirical terms that the paper does not specify: a diagonal-dominant arm mass matrix, heuristic Coriolis/damping terms, base-coupling saturation, acceleration saturation, measurement noise/delay, and fallback simplified dynamics. Treat this as a simulation plant for controller validation, not as a first-principles paper-faithful Delta-arm model.
 
 ### Mode 3: Hover With Arm Motion
 
@@ -84,7 +98,9 @@ The current validation does not enable delay jitter, packet dropout, wind gusts,
 
 Final fresh validation result:
 
-- Mean 3D position error: `0.034330 m`.
+- Axis mean position error: `[0.000588, 0.000749, 0.001213] m`.
+- Axis max position error: `[0.002810, 0.003369, 0.004052] m`.
+- ESO position max error: `[0.003841, 0.003631, 0.004569] m`.
 - Maximum arm tracking error norm: `0.067859 rad`.
 - Divergence flag: `false`.
 
@@ -95,6 +111,7 @@ Figures:
 - ![Mode 3 arm tracking](figures/mode3_arm_tracking.png)
 - ![Mode 3 3D mean position error](figures/mode3_uav_3d_mean_error.png)
 - ![Mode 3 ESO disturbance estimate](figures/mode3_eso_disturbance_estimate.png)
+- ![Mode 3 ESO disturbance estimation error](figures/mode3_eso_disturbance_error.png)
 
 ### Mode 5: Square Tracking With Arm Motion
 
@@ -106,7 +123,9 @@ The same empirical measurement perturbations are used as in mode 3: measurement 
 
 Final fresh validation result:
 
-- Mean 3D position error: `0.034492 m`.
+- Axis mean position error: `[0.001006, 0.001538, 0.000626] m`.
+- Axis max position error: `[0.006264, 0.006796, 0.002616] m`.
+- ESO position max error: `[0.005003, 0.005467, 0.003485] m`.
 - Maximum arm tracking error norm: `0.068300 rad`.
 - Divergence flag: `false`.
 
@@ -117,6 +136,7 @@ Figures:
 - ![Mode 5 arm tracking](figures/mode5_arm_tracking.png)
 - ![Mode 5 3D mean position error](figures/mode5_uav_3d_mean_error.png)
 - ![Mode 5 ESO disturbance estimate](figures/mode5_eso_disturbance_estimate.png)
+- ![Mode 5 ESO disturbance estimation error](figures/mode5_eso_disturbance_error.png)
 
 The PSD figures show the spectrum of measurement residuals and delay-induced residuals. They are diagnostic plots for the configured sensor model; the simulation does not currently log physically separated raw noise and pure delay channels.
 
