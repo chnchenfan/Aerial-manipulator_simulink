@@ -1,4 +1,8 @@
 tuning_results/
+simulink-uam-autotune/
+.codex-tools/
+__pycache__/
+*/__pycache__/
 *.asv
 *.slxc
 *.mex*
