@@ -1,13 +1,13 @@
-function report = plot_mode3_mode5_report(mode3_file, mode5_file, output_dir)
-%PLOT_MODE3_MODE5_REPORT Generate report figures for final mode 3/5 runs.
+﻿function report = plot_mode1_mode2_report(mode1_file, mode2_file, output_dir)
+%PLOT_MODE1_MODE2_REPORT Generate report figures for final Mode 1/2 runs.
 
-if nargin < 1 || isempty(mode3_file)
-    mode3_file = fullfile(pwd, 'tuning_results', 'strict_validation', ...
-        'strict_mode3_final_20260427_152137.mat');
+if nargin < 1 || isempty(mode1_file)
+    mode1_file = fullfile(pwd, 'tuning_results', 'strict_validation', ...
+        'strict_mode1_final_20260427_152137.mat');
 end
-if nargin < 2 || isempty(mode5_file)
-    mode5_file = fullfile(pwd, 'tuning_results', 'strict_validation', ...
-        'strict_mode5_final_20260427_152156.mat');
+if nargin < 2 || isempty(mode2_file)
+    mode2_file = fullfile(pwd, 'tuning_results', 'strict_validation', ...
+        'strict_mode2_final_20260427_152156.mat');
 end
 if nargin < 3 || isempty(output_dir)
     output_dir = fullfile(pwd, 'figures');
@@ -17,8 +17,8 @@ if ~exist(output_dir, 'dir')
 end
 
 report = struct();
-report.mode3 = plot_one_mode(mode3_file, output_dir, 'mode3', 'Mode 3 Hover With Arm Motion');
-report.mode5 = plot_one_mode(mode5_file, output_dir, 'mode5', 'Mode 5 Square Tracking With Arm Motion');
+report.mode1 = plot_one_mode(mode1_file, output_dir, 'mode1', 'Mode 1 Hover With Arm Motion');
+report.mode2 = plot_one_mode(mode2_file, output_dir, 'mode2', 'Mode 2 Square Tracking With Arm Motion');
 write_summary(report, output_dir);
 
 function summary = plot_one_mode(mat_file, output_dir, prefix, title_prefix)
@@ -238,27 +238,30 @@ end
 
 function save_figure(fig, output_dir, name)
 path = fullfile(output_dir, name);
-exportgraphics(fig, path, 'Resolution', 180);
+saveas(fig, path);
 close(fig);
 
 function write_summary(report, output_dir)
-path = fullfile(output_dir, 'mode3_mode5_report_metrics.txt');
+path = fullfile(output_dir, 'mode1_mode2_report_metrics.txt');
 fid = fopen(path, 'w');
 if fid < 0
     error('Unable to write %s.', path);
 end
 cleanup = onCleanup(@() fclose(fid));
-fprintf(fid, 'Mode 3 mean position error: %.6f m\n', report.mode3.position_mean_error_m);
-fprintf(fid, 'Mode 3 axis mean position error: [%.6f %.6f %.6f] m\n', report.mode3.position_axis_mean_m);
-fprintf(fid, 'Mode 3 axis max position error: [%.6f %.6f %.6f] m\n', report.mode3.position_axis_max_m);
-fprintf(fid, 'Mode 3 ESO position max error: [%.6f %.6f %.6f] m\n', report.mode3.eso_position_axis_max_m);
-fprintf(fid, 'Mode 3 ESO disturbance max error: [%.6f %.6f %.6f] m/s^2\n', report.mode3.eso_disturbance_axis_max);
-fprintf(fid, 'Mode 3 max arm error: %.6f rad\n', report.mode3.arm_max_error_rad);
-fprintf(fid, 'Mode 3 divergent: %d\n', report.mode3.is_divergent);
-fprintf(fid, 'Mode 5 mean position error: %.6f m\n', report.mode5.position_mean_error_m);
-fprintf(fid, 'Mode 5 axis mean position error: [%.6f %.6f %.6f] m\n', report.mode5.position_axis_mean_m);
-fprintf(fid, 'Mode 5 axis max position error: [%.6f %.6f %.6f] m\n', report.mode5.position_axis_max_m);
-fprintf(fid, 'Mode 5 ESO position max error: [%.6f %.6f %.6f] m\n', report.mode5.eso_position_axis_max_m);
-fprintf(fid, 'Mode 5 ESO disturbance max error: [%.6f %.6f %.6f] m/s^2\n', report.mode5.eso_disturbance_axis_max);
-fprintf(fid, 'Mode 5 max arm error: %.6f rad\n', report.mode5.arm_max_error_rad);
-fprintf(fid, 'Mode 5 divergent: %d\n', report.mode5.is_divergent);
+fprintf(fid, 'Mode 1 mean position error: %.6f m\n', report.mode1.position_mean_error_m);
+fprintf(fid, 'Mode 1 axis mean position error: [%.6f %.6f %.6f] m\n', report.mode1.position_axis_mean_m);
+fprintf(fid, 'Mode 1 axis max position error: [%.6f %.6f %.6f] m\n', report.mode1.position_axis_max_m);
+fprintf(fid, 'Mode 1 ESO position max error: [%.6f %.6f %.6f] m\n', report.mode1.eso_position_axis_max_m);
+fprintf(fid, 'Mode 1 ESO disturbance max error: [%.6f %.6f %.6f] m/s^2\n', report.mode1.eso_disturbance_axis_max);
+fprintf(fid, 'Mode 1 max arm error: %.6f rad\n', report.mode1.arm_max_error_rad);
+fprintf(fid, 'Mode 1 divergent: %d\n', report.mode1.is_divergent);
+fprintf(fid, 'Mode 2 mean position error: %.6f m\n', report.mode2.position_mean_error_m);
+fprintf(fid, 'Mode 2 axis mean position error: [%.6f %.6f %.6f] m\n', report.mode2.position_axis_mean_m);
+fprintf(fid, 'Mode 2 axis max position error: [%.6f %.6f %.6f] m\n', report.mode2.position_axis_max_m);
+fprintf(fid, 'Mode 2 ESO position max error: [%.6f %.6f %.6f] m\n', report.mode2.eso_position_axis_max_m);
+fprintf(fid, 'Mode 2 ESO disturbance max error: [%.6f %.6f %.6f] m/s^2\n', report.mode2.eso_disturbance_axis_max);
+fprintf(fid, 'Mode 2 max arm error: %.6f rad\n', report.mode2.arm_max_error_rad);
+fprintf(fid, 'Mode 2 divergent: %d\n', report.mode2.is_divergent);
+
+
+

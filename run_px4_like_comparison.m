@@ -1,5 +1,5 @@
-function outputs = run_px4_like_comparison(varargin)
-%RUN_PX4_LIKE_COMPARISON Fresh paper ESO vs PX4-like mode 3/mode 5 runs.
+﻿function outputs = run_px4_like_comparison(varargin)
+%RUN_PX4_LIKE_COMPARISON Fresh paper ESO vs PX4-like mode 1/mode 2 runs.
 
 opts = parse_opts(varargin{:});
 out_dir = opts.OutputDir;
@@ -8,16 +8,16 @@ if ~exist(out_dir, 'dir')
 end
 
 outputs = struct();
-outputs.paper_eso.mode3 = run_case('paper_eso', 'AerialManipulatorSystem', 3, out_dir, opts.StopTime);
-outputs.paper_eso.mode5 = run_case('paper_eso', 'AerialManipulatorSystem', 5, out_dir, opts.StopTime);
-outputs.px4_like.mode3 = run_case('px4_like', 'AerialManipulatorSystem_PX4Like', 3, out_dir, opts.StopTime);
-outputs.px4_like.mode5 = run_case('px4_like', 'AerialManipulatorSystem_PX4Like', 5, out_dir, opts.StopTime);
+outputs.paper_eso.mode1 = run_case('paper_eso', 'AerialManipulatorSystem', 1, out_dir, opts.StopTime);
+outputs.paper_eso.mode2 = run_case('paper_eso', 'AerialManipulatorSystem', 2, out_dir, opts.StopTime);
+outputs.px4_like.mode1 = run_case('px4_like', 'AerialManipulatorSystem_PX4Like', 1, out_dir, opts.StopTime);
+outputs.px4_like.mode2 = run_case('px4_like', 'AerialManipulatorSystem_PX4Like', 2, out_dir, opts.StopTime);
 
 outputs.figure_dir = fullfile(pwd, 'figures', 'px4_like_comparison');
-plot_px4_like_comparison(outputs.paper_eso.mode3.output_file, ...
-    outputs.paper_eso.mode5.output_file, ...
-    outputs.px4_like.mode3.output_file, ...
-    outputs.px4_like.mode5.output_file, ...
+plot_px4_like_comparison(outputs.paper_eso.mode1.output_file, ...
+    outputs.paper_eso.mode2.output_file, ...
+    outputs.px4_like.mode1.output_file, ...
+    outputs.px4_like.mode2.output_file, ...
     outputs.figure_dir);
 
 save(fullfile(out_dir, 'px4_like_comparison_outputs.mat'), 'outputs');
@@ -51,3 +51,4 @@ end
 for i = 1:2:numel(varargin)
     opts.(varargin{i}) = varargin{i + 1};
 end
+

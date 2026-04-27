@@ -1,4 +1,4 @@
-function summary = run_aerialmanipulator_tuning()
+﻿function summary = run_aerialmanipulator_tuning()
 %RUN_AERIALMANIPULATOR_TUNING Search a moderate empirical-noise controller set.
 
 measurement = struct( ...
@@ -102,22 +102,22 @@ best_idx = 1;
 
 for i = 1:numel(all_cases)
     candidate = all_cases{i};
-    mode3 = run_case(candidate, measurement, 3, sprintf('%s_mode3', candidate.name));
-    mode5 = run_case(candidate, measurement, 5, sprintf('%s_mode5', candidate.name));
+    mode1 = run_case(candidate, measurement, 1, sprintf('%s_mode1', candidate.name));
+    mode2 = run_case(candidate, measurement, 2, sprintf('%s_mode2', candidate.name));
 
     combined = struct();
     combined.name = candidate.name;
-    combined.mode3 = mode3.metrics;
-    combined.mode5 = mode5.metrics;
-    combined.mode3_file = get_output_file(mode3);
-    combined.mode5_file = get_output_file(mode5);
-    combined.score = candidate_score(mode3.metrics, mode5.metrics);
-    combined.position_pass = all(mode3.metrics.position_axis_max < 0.05) && ...
-        all(mode5.metrics.position_axis_max < 0.05);
-    combined.arm_pass = all(mode3.metrics.arm_axis_max < 0.10) && ...
-        all(mode5.metrics.arm_axis_max < 0.10);
+    combined.mode1 = mode1.metrics;
+    combined.mode2 = mode2.metrics;
+    combined.mode1_file = get_output_file(mode1);
+    combined.mode2_file = get_output_file(mode2);
+    combined.score = candidate_score(mode1.metrics, mode2.metrics);
+    combined.position_pass = all(mode1.metrics.position_axis_max < 0.05) && ...
+        all(mode2.metrics.position_axis_max < 0.05);
+    combined.arm_pass = all(mode1.metrics.arm_axis_max < 0.10) && ...
+        all(mode2.metrics.arm_axis_max < 0.10);
     combined.all_pass = combined.position_pass && combined.arm_pass && ...
-        ~mode3.metrics.is_divergent && ~mode5.metrics.is_divergent;
+        ~mode1.metrics.is_divergent && ~mode2.metrics.is_divergent;
 
     summary.results{i} = combined;
 
@@ -140,22 +140,22 @@ cfg.controller = struct( ...
     'position_limits', candidate.position_limits, ...
     'attitude_limits', candidate.attitude_limits);
 
-if mode == 5
+if mode == 2
     cfg.input.T = 20;
     cfg.input.pos_target = [0.2; 0.2; 5];
 end
 
 result = run_aerialmanipulator_experiment(cfg);
 
-function score = candidate_score(mode3_metrics, mode5_metrics)
+function score = candidate_score(mode1_metrics, mode2_metrics)
 score = 0;
-score = score + 10 * sum(mode3_metrics.position_axis_max) + 10 * sum(mode5_metrics.position_axis_max);
-score = score + sum(mode3_metrics.arm_axis_max) + sum(mode5_metrics.arm_axis_max);
+score = score + 10 * sum(mode1_metrics.position_axis_max) + 10 * sum(mode2_metrics.position_axis_max);
+score = score + sum(mode1_metrics.arm_axis_max) + sum(mode2_metrics.arm_axis_max);
 
-if mode3_metrics.is_divergent
+if mode1_metrics.is_divergent
     score = score + 1e6;
 end
-if mode5_metrics.is_divergent
+if mode2_metrics.is_divergent
     score = score + 1e6;
 end
 
@@ -164,3 +164,4 @@ output_file = '';
 if isfield(result, 'output_file')
     output_file = result.output_file;
 end
+

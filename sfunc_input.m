@@ -43,32 +43,20 @@ omega = 2 * pi * config.arm_frequency_hz;
 if t <= T
     switch mode
         case 1
-            [qd, qdDot, qdDotDot] = build_hover_ramp(t, T, z_target, angle_max, omega, config.arm_ramp_time, false);
-        case 2
-            [qd, qdDot, qdDotDot] = build_point_ramp(t, T, pos_target, angle_max, omega, config.arm_ramp_time, false);
-        case 3
             [qd, qdDot, qdDotDot] = build_hover_hold(t, z_target, angle_max, omega, config.arm_ramp_time, true);
-        case 4
-            [qd, qdDot, qdDotDot] = build_spiral(t, T, z_target, config);
-        case 5
+        case 2
             [qd, qdDot, qdDotDot] = build_square_track_mission(t, T, pos_target, z_target, angle_max, omega, config.arm_ramp_time, config.square_pause_ratio, true);
         otherwise
-            error('Unknown mode = %d. Valid modes are 1, 2, 3, 4, 5.', mode);
+            error('Unknown mode = %d. Valid modes are 1 and 2.', mode);
     end
 else
     switch mode
         case 1
-            [qd, qdDot, qdDotDot] = build_hover_hold(t, z_target, angle_max, omega, config.arm_ramp_time, false);
-        case 2
-            [qd, qdDot, qdDotDot] = build_point_hold(pos_target, angle_max, omega, config.arm_ramp_time, false);
-        case 3
             [qd, qdDot, qdDotDot] = build_hover_hold(t, z_target, angle_max, omega, config.arm_ramp_time, true);
-        case 4
-            [qd, qdDot, qdDotDot] = build_spiral_hold(t, z_target, config);
-        case 5
+        case 2
             [qd, qdDot, qdDotDot] = build_square_track_hold(z_target, angle_max, omega, config.arm_ramp_time, true, t);
         otherwise
-            error('Unknown mode = %d. Valid modes are 1, 2, 3, 4, 5.', mode);
+            error('Unknown mode = %d. Valid modes are 1 and 2.', mode);
     end
 end
 
@@ -82,16 +70,14 @@ sys = [qd(1:3); qdDot(1:3); qd(7:9); qdDot(7:9); qdDotDot(1:3)];
 
 function config = get_input_config()
 config = struct( ...
-    'mode', 3, ...
+    'mode', 1, ...
     'T', 80.0, ...
     'z_target', 5.0, ...
     'pos_target', [0.08; 0.08; 5], ...
     'arm_angle_max', 1.0, ...
     'arm_frequency_hz', 0.5, ...
     'arm_ramp_time', 1.0, ...
-    'square_pause_ratio', 0.60, ...
-    'spiral_radius', 2.0, ...
-    'spiral_turns', 3);
+    'square_pause_ratio', 0.60);
 
 try
     runtime_config = sim_tuning_runtime('get_config');
@@ -101,57 +87,6 @@ end
 
 if isfield(runtime_config, 'input') && isstruct(runtime_config.input)
     config = merge_structs(config, runtime_config.input);
-end
-
-function [qd, qdDot, qdDotDot] = build_hover_ramp(t, T, z_target, angle_max, omega, arm_ramp_time, arm_active)
-qd = zeros(9,1);
-qdDot = zeros(9,1);
-qdDotDot = zeros(9,1);
-
-tau = t / T;
-qd(3) = z_target * tau^2 * (3 - 2 * tau);
-qdDot(3) = z_target * 6 * tau * (1 - tau) / T;
-qdDotDot(3) = z_target * 6 * (1 - 2 * tau) / (T^2);
-
-if arm_active
-    [qd(7:9), qdDot(7:9), qdDotDot(7:9)] = build_arm_sine(t, angle_max, omega, arm_ramp_time);
-end
-
-function [qd, qdDot, qdDotDot] = build_point_ramp(t, T, pos_target, angle_max, omega, arm_ramp_time, arm_active)
-qd = zeros(9,1);
-qdDot = zeros(9,1);
-qdDotDot = zeros(9,1);
-
-tau = t / T;
-shape = tau^2 * (3 - 2 * tau);
-shape_dot = 6 * tau * (1 - tau) / T;
-shape_ddot = 6 * (1 - 2 * tau) / (T^2);
-
-qd(1:3) = pos_target * shape;
-qdDot(1:3) = pos_target * shape_dot;
-qdDotDot(1:3) = pos_target * shape_ddot;
-
-if arm_active
-    [qd(7:9), qdDot(7:9), qdDotDot(7:9)] = build_arm_sine(t, angle_max, omega, arm_ramp_time);
-end
-
-function [qd, qdDot, qdDotDot] = build_planar_track_ramp(t, T, pos_target, z_target, angle_max, omega, arm_ramp_time, arm_active)
-qd = zeros(9,1);
-qdDot = zeros(9,1);
-qdDotDot = zeros(9,1);
-
-tau = t / T;
-shape = tau^2 * (3 - 2 * tau);
-shape_dot = 6 * tau * (1 - tau) / T;
-shape_ddot = 6 * (1 - 2 * tau) / (T^2);
-
-qd(1:2) = pos_target(1:2) * shape;
-qd(3) = z_target;
-qdDot(1:2) = pos_target(1:2) * shape_dot;
-qdDotDot(1:2) = pos_target(1:2) * shape_ddot;
-
-if arm_active
-    [qd(7:9), qdDot(7:9), qdDotDot(7:9)] = build_arm_sine(t, angle_max, omega, arm_ramp_time);
 end
 
 function [qd, qdDot, qdDotDot] = build_hover_hold(t, z_target, angle_max, omega, arm_ramp_time, arm_active)
@@ -164,37 +99,12 @@ if arm_active
     [qd(7:9), qdDot(7:9), qdDotDot(7:9)] = build_arm_sine(t, angle_max, omega, arm_ramp_time);
 end
 
-function [qd, qdDot, qdDotDot] = build_point_hold(pos_target, angle_max, omega, arm_ramp_time, arm_active, t)
-if nargin < 6
-    t = 0;
-end
-
-qd = zeros(9,1);
-qdDot = zeros(9,1);
-qdDotDot = zeros(9,1);
-qd(1:3) = pos_target;
-
-if arm_active
-    [qd(7:9), qdDot(7:9), qdDotDot(7:9)] = build_arm_sine(t, angle_max, omega, arm_ramp_time);
-end
-
-function [qd, qdDot, qdDotDot] = build_planar_track_hold(pos_target, z_target, angle_max, omega, arm_ramp_time, arm_active, t)
-qd = zeros(9,1);
-qdDot = zeros(9,1);
-qdDotDot = zeros(9,1);
-qd(1:2) = pos_target(1:2);
-qd(3) = z_target;
-
-if arm_active
-    [qd(7:9), qdDot(7:9), qdDotDot(7:9)] = build_arm_sine(t, angle_max, omega, arm_ramp_time);
-end
-
 function [qd, qdDot, qdDotDot] = build_square_track_mission(t, T, pos_target, z_target, angle_max, omega, arm_ramp_time, square_pause_ratio, arm_active)
 qd = zeros(9,1);
 qdDot = zeros(9,1);
 qdDotDot = zeros(9,1);
 
-% The Simulink plant starts at the hover height. Keep mode 5 at that
+% The Simulink plant starts at the hover height. Keep mode 2 at that
 % height from t=0 so tracking metrics reflect controller performance,
 % rather than a reference/initial-condition mismatch.
 takeoff_time = 0.0;
@@ -258,61 +168,6 @@ tau = min(max(t / duration, 0), 1);
 shape = 6 * tau^5 - 15 * tau^4 + 10 * tau^3;
 shape_dot = (30 * tau^4 - 60 * tau^3 + 30 * tau^2) / duration;
 shape_ddot = (120 * tau^3 - 180 * tau^2 + 60 * tau) / (duration^2);
-
-function [qd, qdDot, qdDotDot] = build_spiral(t, T, z_target, config)
-qd = zeros(9,1);
-qdDot = zeros(9,1);
-qdDotDot = zeros(9,1);
-
-tau = t / T;
-s = 6*tau^5 - 15*tau^4 + 10*tau^3;
-s_dot = (30*tau^4 - 60*tau^3 + 30*tau^2) / T;
-s_ddot = (120*tau^3 - 180*tau^2 + 60*tau) / (T^2);
-
-spiral_omega = 2*pi*config.spiral_turns/T;
-theta = spiral_omega * t;
-r = config.spiral_radius * s;
-r_dot = config.spiral_radius * s_dot;
-r_ddot = config.spiral_radius * s_ddot;
-
-qd(1) = r * cos(theta);
-qd(2) = r * sin(theta);
-qd(3) = z_target * s;
-
-qdDot(1) = r_dot * cos(theta) - r * sin(theta) * spiral_omega;
-qdDot(2) = r_dot * sin(theta) + r * cos(theta) * spiral_omega;
-qdDot(3) = z_target * s_dot;
-
-qdDotDot(1) = r_ddot * cos(theta) - 2 * r_dot * sin(theta) * spiral_omega - ...
-    r * cos(theta) * spiral_omega^2;
-qdDotDot(2) = r_ddot * sin(theta) + 2 * r_dot * cos(theta) * spiral_omega - ...
-    r * sin(theta) * spiral_omega^2;
-qdDotDot(3) = z_target * s_ddot;
-
-if norm(qdDot(1:2)) > 1e-6
-    qd(6) = atan2(qdDot(2), qdDot(1));
-end
-
-function [qd, qdDot, qdDotDot] = build_spiral_hold(t, z_target, config)
-qd = zeros(9,1);
-qdDot = zeros(9,1);
-qdDotDot = zeros(9,1);
-
-spiral_omega = 2*pi*config.spiral_turns/config.T;
-theta = spiral_omega * t;
-r = config.spiral_radius;
-
-qd(1) = r * cos(theta);
-qd(2) = r * sin(theta);
-qd(3) = z_target;
-
-qdDot(1) = -r * sin(theta) * spiral_omega;
-qdDot(2) = r * cos(theta) * spiral_omega;
-qd(6) = theta + pi/2;
-qdDot(6) = spiral_omega;
-
-qdDotDot(1) = -r * cos(theta) * spiral_omega^2;
-qdDotDot(2) = -r * sin(theta) * spiral_omega^2;
 
 function [q_arm, qd_arm, qdd_arm] = build_arm_sine(t, angle_max, omega, ramp_time)
 [gain, gain_dot, gain_ddot] = smooth_ramp(t, ramp_time);

@@ -1,4 +1,4 @@
-function report = plot_px4_like_comparison(mode3_eso_file, mode5_eso_file, mode3_px4_file, mode5_px4_file, output_dir)
+﻿function report = plot_px4_like_comparison(mode1_eso_file, mode2_eso_file, mode1_px4_file, mode2_px4_file, output_dir)
 %PLOT_PX4_LIKE_COMPARISON Plot paper ESO vs conservative PX4-like baseline.
 
 if nargin < 5 || isempty(output_dir)
@@ -9,10 +9,10 @@ if ~exist(output_dir, 'dir')
 end
 
 cases = {
-    'mode3', 'paper_eso', mode3_eso_file;
-    'mode3', 'px4_like', mode3_px4_file;
-    'mode5', 'paper_eso', mode5_eso_file;
-    'mode5', 'px4_like', mode5_px4_file};
+    'mode1', 'paper_eso', mode1_eso_file;
+    'mode1', 'px4_like', mode1_px4_file;
+    'mode2', 'paper_eso', mode2_eso_file;
+    'mode2', 'px4_like', mode2_px4_file};
 
 report = struct();
 for i = 1:size(cases, 1)
@@ -22,8 +22,8 @@ for i = 1:size(cases, 1)
     report.(cases{i, 1}).([cases{i, 2} '_data']) = data;
 end
 
-plot_mode_pair(report.mode3.paper_eso_data, report.mode3.px4_like_data, output_dir, 'mode3');
-plot_mode_pair(report.mode5.paper_eso_data, report.mode5.px4_like_data, output_dir, 'mode5');
+plot_mode_pair(report.mode1.paper_eso_data, report.mode1.px4_like_data, output_dir, 'mode1');
+plot_mode_pair(report.mode2.paper_eso_data, report.mode2.px4_like_data, output_dir, 'mode2');
 write_metric_table(report, output_dir);
 
 function data = extract_case_data(result)
@@ -128,10 +128,10 @@ end
 cleanup = onCleanup(@() fclose(fid));
 
 fprintf(fid, 'controller,mode,position_axis_mean,position_axis_max,position_rms,position_max,arm_axis_max,is_divergent,thrust_saturation_ratio,torque_saturation_ratio\n');
-write_metrics(fid, 'paper_eso', 'mode3', report.mode3.paper_eso);
-write_metrics(fid, 'px4_like', 'mode3', report.mode3.px4_like);
-write_metrics(fid, 'paper_eso', 'mode5', report.mode5.paper_eso);
-write_metrics(fid, 'px4_like', 'mode5', report.mode5.px4_like);
+write_metrics(fid, 'paper_eso', 'mode1', report.mode1.paper_eso);
+write_metrics(fid, 'px4_like', 'mode1', report.mode1.px4_like);
+write_metrics(fid, 'paper_eso', 'mode2', report.mode2.paper_eso);
+write_metrics(fid, 'px4_like', 'mode2', report.mode2.px4_like);
 
 function write_metrics(fid, controller, mode_label, metrics)
 fprintf(fid, '%s,%s,%s,%s,%.6f,%.6f,%s,%d,%.6f,%.6f\n', ...
@@ -171,3 +171,4 @@ end
 function save_figure(fig, output_dir, filename)
 exportgraphics(fig, fullfile(output_dir, filename), 'Resolution', 180);
 close(fig);
+

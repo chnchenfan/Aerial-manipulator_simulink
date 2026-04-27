@@ -1,0 +1,14 @@
+Mode 1 mean position error: 0.001711 m
+Mode 1 axis mean position error: [0.000588 0.000749 0.001213] m
+Mode 1 axis max position error: [0.002810 0.003369 0.004052] m
+Mode 1 ESO position max error: [0.003841 0.003631 0.004569] m
+Mode 1 ESO disturbance max error: [0.096820 0.060475 0.083043] m/s^2
+Mode 1 max arm error: 0.068633 rad
+Mode 1 divergent: 0
+Mode 2 mean position error: 0.001735 m
+Mode 2 axis mean position error: [0.000614 0.000758 0.001214] m
+Mode 2 axis max position error: [0.002841 0.003350 0.004006] m
+Mode 2 ESO position max error: [0.003809 0.003585 0.004560] m
+Mode 2 ESO disturbance max error: [0.092736 0.060361 0.083225] m/s^2
+Mode 2 max arm error: 0.067890 rad
+Mode 2 divergent: 0

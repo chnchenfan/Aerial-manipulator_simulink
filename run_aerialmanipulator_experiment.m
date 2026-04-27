@@ -38,7 +38,7 @@ end
 function config = with_default_config(config)
 defaults = struct();
 defaults.input = struct( ...
-    'mode', 3, ...
+    'mode', 1, ...
     'T', 80.0, ...
     'z_target', 5.0, ...
     'pos_target', [0.08; 0.08; 5], ...
@@ -114,15 +114,9 @@ filename = fullfile(config.output.save_dir, ...
 function label = scenario_label(mode)
 switch mode
     case 1
-        label = 'mode1_hover_ramp';
+        label = 'mode1_hover_arm';
     case 2
-        label = 'mode2_track_only';
-    case 3
-        label = 'mode3_hover_arm';
-    case 4
-        label = 'mode4_spiral';
-    case 5
-        label = 'mode5_track_arm';
+        label = 'mode2_track_arm';
     otherwise
         label = sprintf('mode%d_custom', mode);
 end

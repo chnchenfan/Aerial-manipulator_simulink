@@ -1,4 +1,4 @@
-# Aerial Manipulator Simulink S-Function Controllers
+﻿# Aerial Manipulator Simulink S-Function Controllers
 
 This repository implements and evaluates two aerial-manipulator control baselines in MATLAB/Simulink using S-functions:
 
@@ -47,9 +47,7 @@ The PX4-like controller in this repository is not PX4 stock firmware, and it is 
 +-- Plotting and reporting
 |   +-- plot_mode1_data.m
 |   +-- plot_mode2_data.m
-|   +-- plot_mode3_data.m
-|   +-- plot_mode5_data.m
-|   +-- plot_mode3_mode5_report.m
+|   +-- plot_mode1_mode2_report.m
 |   +-- plot_px4_like_comparison.m
 |   +-- figures/
 |       +-- px4_like_comparison/
@@ -86,9 +84,9 @@ Run a configured experiment:
 
 ```matlab
 config = struct();
-config.input = struct('mode', 3);
+config.input = struct('mode', 1);
 config.sim = struct('model_name', 'AerialManipulatorSystem', 'stop_time', 100);
-config.output = struct('label', 'paper_eso_mode3', ...
+config.output = struct('label', 'paper_eso_mode1', ...
     'save_dir', fullfile(pwd, 'tuning_results'), ...
     'save_results', true);
 result = run_aerialmanipulator_experiment(config);
@@ -100,12 +98,12 @@ Run the fresh ESO vs PX4-like comparison:
 outputs = run_px4_like_comparison();
 ```
 
-This runs `paper_eso` and `px4_like` in mode 3 and mode 5, writes result files under `tuning_results/px4_like_comparison/`, and generates comparison figures plus `px4_like_metrics_summary.txt` under `figures/px4_like_comparison/`.
+This runs `paper_eso` and `px4_like` in mode 1 and mode 2, writes result files under `tuning_results/px4_like_comparison/`, and generates comparison figures plus `px4_like_metrics_summary.txt` under `figures/px4_like_comparison/`.
 
-Generate the current mode 3/mode 5 ESO report figures:
+Generate the current mode 1/mode 2 ESO report figures:
 
 ```matlab
-plot_mode3_mode5_report
+plot_mode1_mode2_report
 ```
 
 The local Codex autotuning skill used during development is not uploaded yet. For now, reproducible entrypoints are the MATLAB scripts in this repository. Generated trial data under `tuning_results/` is intentionally ignored by Git.
@@ -138,9 +136,9 @@ max(abs(p_hat - p_true), [], 1) < [0.01 0.01 0.01]  % m
 
 The logged `h_v_true` / `h_v_est` channel is a disturbance-acceleration estimate in `m/s^2`, not a meter-valued position error.
 
-### Mode 3: Hover With Arm Motion
+### Mode 1: Hover With Arm Motion
 
-Mode 3 verifies whether the UAV can hold a stable hover while the manipulator moves periodically. This scenario stresses disturbance rejection because arm motion changes the mass distribution and introduces coupling forces and torques. The UAV reference is near `[0, 0, 5] m`, and the three manipulator joints follow sinusoidal references.
+Mode 1 verifies whether the UAV can hold a stable hover while the manipulator moves periodically. This scenario stresses disturbance rejection because arm motion changes the mass distribution and introduces coupling forces and torques. The UAV reference is near `[0, 0, 5] m`, and the three manipulator joints follow sinusoidal references.
 
 Enabled measurement perturbations:
 
@@ -173,11 +171,11 @@ Latest fresh comparison results:
 | `paper_eso` | `[0.000588 0.000749 0.001213]` | `[0.002810 0.003369 0.004052]` | `0.001904` | `0.004532` | `[0.042269 0.039801 0.041402]` | `false` |
 | `px4_like` | `[0.001502 0.001915 0.001923]` | `[0.005971 0.006147 0.006930]` | `0.003861` | `0.008115` | `[0.040316 0.041182 0.039375]` | `false` |
 
-### Mode 5: Square Tracking With Arm Motion
+### Mode 2: Square Tracking With Arm Motion
 
-Mode 5 verifies whether the UAV can track a horizontal square-like trajectory while the manipulator moves. Compared with mode 3, it adds translational motion and corner transitions, so it tests tracking performance and disturbance rejection at the same time. The reference starts at the hover height (`z = 5 m`) to avoid an artificial initial-condition mismatch.
+Mode 2 verifies whether the UAV can track a horizontal square-like trajectory while the manipulator moves. Compared with mode 1, it adds translational motion and corner transitions, so it tests tracking performance and disturbance rejection at the same time. The reference starts at the hover height (`z = 5 m`) to avoid an artificial initial-condition mismatch.
 
-Mode 5 uses the same empirical measurement perturbations as mode 3. The same unmodeled robustness cases, such as wind, dropout, actuator faults, payload changes, and collision/contact disturbances, are not enabled.
+Mode 2 uses the same empirical measurement perturbations as mode 1. The same unmodeled robustness cases, such as wind, dropout, actuator faults, payload changes, and collision/contact disturbances, are not enabled.
 
 Latest fresh comparison results:
 
@@ -208,3 +206,5 @@ The Delta-arm plant in `sfunc_arm_dynamics.m` is a project-specific simulation m
 - Large generated simulation artifacts should stay out of Git.
 - `tuning_results/` is local output and is ignored by Git.
 - The included paper PDF provides background for the ESO-based aerial manipulation controller design.
+
+

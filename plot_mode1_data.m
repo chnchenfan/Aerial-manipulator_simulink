@@ -1,337 +1,155 @@
-function plot_mode1_data(varargin)
-%% 基于Simulink数据的性能分析工具 - Mode 1 (定高飞行)
-%
-% 用法：
-%   plot_mode1_data()                   - 自动抓取工作区变量分析
-%   plot_mode1_data('filename.mat')     - 分析指定的MAT文件
-%
-% 兼容变量名 (任意一种组合均可):
-%   组合A: pd(期望位置), p(实际位置), qd(期望关节), q(实际关节)
-%   组合B: quad_pos_desired, quad_pos_actual, arm_pos_desired, arm_pos_actual
+﻿function plot_mode1_data(mat_file)
+%PLOT_MODE1_DATA Plot mode 1 tracking, PSD, and MSE figures.
 
-clc; close all;
-fprintf('=== 飞行机械臂系统性能分析 (Mode 1: 定高飞行) ===\n\n');
-
-%% 1. 解析输入与加载数据
-[data, data_source] = load_data_source(varargin);
-
-if isempty(data)
-    return; % 数据加载失败，终止运行
+if nargin < 1 || isempty(mat_file)
+    mat_file = find_latest_result('mode1');
 end
 
-% 将数据解包为本地变量，方便后续计算
-p = data.p;
-pd = data.pd;
-q = data.q;
-qd = data.qd;
+result = load_result_file(mat_file);
+data = extract_plot_data(result);
 
-% 尝试获取时间向量 (如果数据结构中没有，后续会生成)
-if isfield(data, 'time')
-    t = data.time;
-    has_time = true;
-else
-    has_time = false;
+plots_dir = fullfile(fileparts(mat_file), 'plots');
+if ~exist(plots_dir, 'dir')
+    mkdir(plots_dir);
 end
 
-%% 2. 数据预处理 (保持原有逻辑，稍作适配)
-% 处理位置数据
-[p_data, pd_data, t_pos] = extract_data_values(p, pd);
-% 处理关节数据
-[q_data, qd_data, ~] = extract_data_values(q, qd);
+[~, base_name, ~] = fileparts(mat_file);
 
-% 确定时间向量
-if has_time
-    % 使用加载的时间
-elseif ~isempty(t_pos)
-    t = t_pos;
-else
-    % 创建默认时间向量
-    dt = 0.01;
-    t = (0:size(p_data,1)-1)' * dt;
-    fprintf('⚠️  未找到时间向量，使用假设的采样时间%.3fs\n', dt);
-end
-
-% 确保数据维度一致 (列向量: 时间 x 通道)
-if size(p_data, 1) ~= length(t)
-    fprintf('⚠️  数据长度与时间不匹配，尝试转置...\n');
-    if size(p_data, 2) == length(t)
-        p_data = p_data'; pd_data = pd_data';
-        q_data = q_data'; qd_data = qd_data';
-    end
-end
-
-% 赋值给计算变量
-quad_position = p_data(:, 1:3);
-desired_position = pd_data(:, 1:3);
-if size(q_data, 2) >= 3
-    arm_angles = q_data(:, 1:3);
-    desired_arm_angles = qd_data(:, 1:3);
-else
-    arm_angles = q_data;
-    desired_arm_angles = qd_data;
-end
-z_actual = quad_position(:, 3);
-z_desired = desired_position(:, 3);
-
-fprintf('✅ 数据预处理完成\n');
-fprintf('   数据点数: %d\n', length(t));
-fprintf('   时间范围: %.2f s\n', t(end));
-
-%% 3. Mode 1 特性验证
-x_variation = std(desired_position(:, 1));
-y_variation = std(desired_position(:, 2));
-z_final = mean(z_desired(end-min(100, length(z_desired)):end));
-
-fprintf('\n=== Mode 1 特征验证 ===\n');
-fprintf('   Z轴目标高度: %.3f m\n', z_final);
-if x_variation < 0.1 && y_variation < 0.1 && z_final > 0.1
-    fprintf('   ✅ 确认为Mode 1：无人机定高飞行模式\n');
-else
-    fprintf('   ⚠️  警告：数据特征可能不符合定高飞行模式\n');
-end
-
-%% 4. 性能指标计算
-fprintf('\n=== 性能指标计算 ===\n');
-
-% 基础误差
-z_error = abs(z_actual - z_desired);
-position_error_norm = sqrt(sum((quad_position - desired_position).^2, 2));
-arm_error = abs(arm_angles - desired_arm_angles);
-arm_error_norm = sqrt(sum(arm_error.^2, 2));
-
-% 稳态分析
-steady_value = z_final;
-final_height = mean(z_actual(end-min(50, length(z_actual)):end));
-steady_state_error = abs(final_height - steady_value);
-
-% 上升时间 (10% - 90%)
-rise_10 = steady_value * 0.1;
-rise_90 = steady_value * 0.9;
-idx_10 = find(z_actual >= rise_10, 1);
-idx_90 = find(z_actual >= rise_90, 1);
-if ~isempty(idx_10) && ~isempty(idx_90)
-    rise_time = t(idx_90) - t(idx_10);
-else
-    rise_time = NaN;
-end
-
-% 峰值与超调
-[peak_value, peak_idx] = max(z_actual);
-peak_time = t(peak_idx);
-if peak_value > steady_value
-    overshoot_percent = (peak_value - steady_value) / steady_value * 100;
-else
-    overshoot_percent = 0;
-end
-
-% 调节时间 (2%误差带)
-tolerance = 0.02 * steady_value;
-settling_mask = abs(z_actual - steady_value) <= max(tolerance, 0.01);
-last_unsettled = find(~settling_mask, 1, 'last');
-if isempty(last_unsettled)
-    settling_time = 0;
-elseif last_unsettled == length(t)
-    settling_time = t(end); % 未稳定
-else
-    settling_time = t(last_unsettled+1);
-end
-
-% 统计指标
-mean_error = mean(z_error);
-max_error = max(z_error);
-rms_error = sqrt(mean(z_error.^2));
-q_max_swing = max(max(abs(arm_angles)));
-q_rms = sqrt(mean(mean(arm_angles.^2)));
-
-% 打印结果
-fprintf('1. 时域指标:\n');
-fprintf('   上升时间: %.3f s\n', rise_time);
-fprintf('   调节时间: %.3f s\n', settling_time);
-fprintf('   超调量:   %.2f%%\n', overshoot_percent);
-fprintf('   稳态误差: %.4f m\n', steady_state_error);
-fprintf('2. 跟踪精度:\n');
-fprintf('   RMS误差:  %.4f m (%.1f mm)\n', rms_error, rms_error*1000);
-fprintf('   最大误差: %.4f m\n', max_error);
-
-%% 5. 简单的评分系统 (补全逻辑)
-% 定义评分权重和基准
-rise_score = max(0, 100 - rise_time * 10); % 假设2秒内上升为满分标准，每慢0.1秒扣1分
-overshoot_score = max(0, 100 - overshoot_percent * 2); % 每1%超调扣2分
-if settling_time < t(end)
-    settling_score = 100 - settling_time * 5; 
-else
-    settling_score = 40; % 未稳定
-end
-accuracy_score = max(0, 100 - rms_error * 1000); % 误差每1mm扣1分
-stability_score = max(0, 100 - q_rms * 180/pi); % 机械臂摆动每1度扣1分
-
-scores = [rise_score, overshoot_score, settling_score, accuracy_score, stability_score];
-avg_score = mean(scores);
-
-%% 6. 可视化绘图
-fprintf('\n=== 生成分析图表 ===\n');
-set(0, 'DefaultAxesFontSize', 11, 'DefaultLineLineWidth', 1.5);
-
-% 图1: 高度跟踪
-figure('Name', '无人机高度响应', 'Color', 'w');
-plot(t, z_desired, 'r--', 'LineWidth', 2); hold on;
-plot(t, z_actual, 'b-', 'LineWidth', 1.5);
-title('高度阶跃响应'); xlabel('时间 (s)'); ylabel('高度 (m)');
-legend('期望高度', '实际高度'); grid on;
-
-% 图2: 3D轨迹
-figure('Name', '3D 飞行轨迹', 'Color', 'w');
-plot3(desired_position(:,1), desired_position(:,2), desired_position(:,3), 'r--'); hold on;
-plot3(quad_position(:,1), quad_position(:,2), quad_position(:,3), 'b-');
-plot3(quad_position(end,1), quad_position(end,2), quad_position(end,3), 'ro', 'MarkerFaceColor','r');
-title('空间飞行轨迹'); xlabel('X'); ylabel('Y'); zlabel('Z');
-grid on; view(45, 30); axis equal;
-
-% 图3: 机械臂关节
-figure('Name', '机械臂关节角度', 'Color', 'w');
-for i=1:3
+fig1 = figure('Name', 'Mode 1 UAV Position Tracking', 'Color', 'w');
+for i = 1:3
     subplot(3,1,i);
-    plot(t, desired_arm_angles(:,i), 'r--'); hold on;
-    plot(t, arm_angles(:,i), 'b-');
-    ylabel(['关节 ' num2str(i) ' (rad)']); grid on;
-    if i==1, title('机械臂关节跟踪'); legend('期望', '实际'); end
+    plot(data.t, data.p_desired(:,i), 'r--', data.t, data.p_actual(:,i), 'b-', 'LineWidth', 1.3);
+    ylabel(sprintf('%c (m)', 'X' + i - 1));
+    grid on;
+    if i == 1
+        title('Mode 1 UAV Three-Axis Position Tracking');
+        legend('Desired', 'Actual', 'Location', 'best');
+    end
 end
-xlabel('时间 (s)');
+xlabel('Time (s)');
+saveas(fig1, fullfile(plots_dir, [base_name '_uav_tracking.png']));
 
-%% 7. 保存结果
-if strcmp(data_source, 'mat')
-    % 如果是读文件的，保存结果时换个名字以免覆盖原数据
-    save_name = ['Result_' datestr(now, 'HHMMSS') '.mat'];
+fig2 = figure('Name', 'Mode 1 Arm Tracking', 'Color', 'w');
+for i = 1:3
+    subplot(3,1,i);
+    plot(data.t, data.q_desired(:,i), 'r--', data.t, data.q_actual(:,i), 'b-', 'LineWidth', 1.3);
+    ylabel(sprintf('q%d (rad)', i));
+    grid on;
+    if i == 1
+        title('Mode 1 Arm Three-Axis Tracking');
+        legend('Desired', 'Actual', 'Location', 'best');
+    end
+end
+xlabel('Time (s)');
+saveas(fig2, fullfile(plots_dir, [base_name '_arm_tracking.png']));
+
+fig3 = figure('Name', 'Mode 1 Measurement PSD', 'Color', 'w');
+plot_psd_group(data.t, data.p_measurement_error, {'p_x', 'p_y', 'p_z'}, 1, 'UAV Measurement Error PSD');
+plot_psd_group(data.t, data.q_measurement_error, {'q_1', 'q_2', 'q_3'}, 2, 'Arm Measurement Error PSD');
+saveas(fig3, fullfile(plots_dir, [base_name '_measurement_psd.png']));
+
+fig4 = figure('Name', 'Mode 1 UAV Running MSE', 'Color', 'w');
+running_mse = compute_running_mse(data.p_actual - data.p_desired);
+plot(data.t, running_mse(:,1), 'LineWidth', 1.3); hold on;
+plot(data.t, running_mse(:,2), 'LineWidth', 1.3);
+plot(data.t, running_mse(:,3), 'LineWidth', 1.3);
+grid on;
+xlabel('Time (s)');
+ylabel('Running MSE (m^2)');
+title('Mode 1 UAV Position Running MSE');
+legend('MSE_x', 'MSE_y', 'MSE_z', 'Location', 'best');
+saveas(fig4, fullfile(plots_dir, [base_name '_uav_mse.png']));
+
+fprintf('Saved Mode 1 plots to %s\n', plots_dir);
+
+function plot_psd_group(t, signal_matrix, labels, subplot_index, plot_title)
+subplot(2,1,subplot_index);
+hold on;
+for i = 1:size(signal_matrix, 2)
+    [freq, psd_vals] = compute_psd(t, signal_matrix(:,i));
+    plot(freq, 10 * log10(psd_vals + eps), 'LineWidth', 1.2);
+end
+grid on;
+xlabel('Frequency (Hz)');
+ylabel('PSD (dB/Hz)');
+title(plot_title);
+legend(labels, 'Location', 'best');
+xlim([0, min(10, max(freq))]);
+
+function running_mse = compute_running_mse(error_matrix)
+n = size(error_matrix, 1);
+running_mse = zeros(size(error_matrix));
+cumulative = zeros(1, size(error_matrix, 2));
+for k = 1:n
+    cumulative = cumulative + error_matrix(k,:).^2;
+    running_mse(k,:) = cumulative / k;
+end
+
+function [freq, psd_vals] = compute_psd(t, signal)
+signal = signal(:);
+dt = median(diff(t));
+signal = signal - mean(signal);
+n = numel(signal);
+window = hann(n);
+nfft = max(256, 2^nextpow2(n));
+[psd_vals, freq] = periodogram(signal, window, nfft, 1 / dt);
+
+function data = extract_plot_data(result)
+signals = result.signals;
+data.t = get_signal_time(signals, {'p_true', 'p_actual', 'p_desired'});
+data.p_actual = get_signal_data(signals, {'p_true', 'p_actual'});
+data.p_desired = get_signal_data(signals, {'p_desired'});
+data.q_actual = get_signal_data(signals, {'q_true', 'q_actual'});
+data.q_desired = get_signal_data(signals, {'q_desired', 'q_desired_ctrl'});
+data.p_measured = get_signal_data(signals, {'p_actual'});
+data.q_measured = get_signal_data(signals, {'q_actual'});
+
+n = min([size(data.p_actual,1), size(data.p_desired,1), size(data.q_actual,1), size(data.q_desired,1), size(data.p_measured,1), size(data.q_measured,1), numel(data.t)]);
+data.t = data.t(1:n);
+data.p_actual = data.p_actual(1:n,:);
+data.p_desired = data.p_desired(1:n,:);
+data.q_actual = data.q_actual(1:n,:);
+data.q_desired = data.q_desired(1:n,:);
+data.p_measured = data.p_measured(1:n,:);
+data.q_measured = data.q_measured(1:n,:);
+data.p_measurement_error = data.p_measured - data.p_actual;
+data.q_measurement_error = data.q_measured - data.q_actual;
+
+function t = get_signal_time(signals, names)
+t = [];
+for i = 1:numel(names)
+    if isfield(signals, names{i}) && isfield(signals.(names{i}), 'time')
+        t = signals.(names{i}).time;
+        return;
+    end
+end
+error('No time signal found in result.');
+
+function data = get_signal_data(signals, names)
+data = [];
+for i = 1:numel(names)
+    if isfield(signals, names{i}) && isfield(signals.(names{i}), 'data')
+        data = signals.(names{i}).data;
+        return;
+    end
+end
+error('Missing required signal: %s', strjoin(names, ', '));
+
+function file = find_latest_result(prefix)
+files = dir(fullfile(pwd, 'tuning_results', [prefix '*.mat']));
+if isempty(files)
+    error('No result files found for prefix %s.', prefix);
+end
+[~, idx] = max([files.datenum]);
+file = fullfile(files(idx).folder, files(idx).name);
+
+function result = load_result_file(mat_file)
+loaded = load(mat_file);
+if isfield(loaded, 'result')
+    result = loaded.result;
 else
-    save_name = 'mode1_analysis_results.mat';
+    error('Unsupported result file format: %s', mat_file);
 end
 
-results.metrics.rise_time = rise_time;
-results.metrics.settling_time = settling_time;
-results.metrics.overshoot = overshoot_percent;
-results.metrics.rms_error = rms_error;
-results.score = avg_score;
 
-try
-    save(save_name, 'results');
-    fprintf('\n💾 结果已保存: %s\n', save_name);
-catch
-    fprintf('\n⚠️  保存结果失败 (可能是权限问题)\n');
-end
 
-fprintf('\n✅ 分析全部完成！综合评分: %.1f\n', avg_score);
-
-end
-
-%% ================= 辅助函数 =================
-
-function [data, source] = load_data_source(args)
-    % 智能加载数据 (工作区 或 MAT文件)
-    data = [];
-    
-    % 1. 判断输入参数
-    if isempty(args)
-        source = 'workspace';
-        filename = '';
-    else
-        source = 'mat';
-        filename = args{1};
-    end
-    
-    % 2. 执行加载
-    raw_data = [];
-    if strcmp(source, 'mat')
-        if ~exist(filename, 'file')
-            error('❌ 文件不存在: %s', filename);
-        end
-        fprintf('📂 正在加载MAT文件: %s ...\n', filename);
-        raw_data = load(filename);
-    else
-        fprintf('🔍 正在扫描工作区变量...\n');
-        % 尝试从工作区获取所有相关变量
-        try
-            vars = evalin('base', 'who');
-            for i=1:length(vars)
-                raw_data.(vars{i}) = evalin('base', vars{i});
-            end
-        catch
-            error('❌ 无法访问工作区变量，请确保数据已加载到工作区');
-        end
-    end
-    
-    % 3. 变量映射 (标准化变量名为 p, pd, q, qd)
-    data = map_variable_names(raw_data);
-    
-    % 4. 验证必需变量
-    required = {'p', 'pd', 'q', 'qd'};
-    missing = {};
-    for i=1:length(required)
-        if ~isfield(data, required{i})
-            missing{end+1} = required{i};
-        end
-    end
-    
-    if ~isempty(missing)
-        fprintf('❌ 缺少必需变量:\n');
-        disp(missing);
-        fprintf('支持的变量名对 (实际/期望):\n');
-        fprintf('  - p / pd\n');
-        fprintf('  - quad_pos_actual / quad_pos_desired\n');
-        data = [];
-    end
-end
-
-function data = map_variable_names(raw)
-    % 将不同命名习惯的变量映射为标准名称 p, pd, q, qd
-    data = raw;
-    
-    % 映射表 {标准名, 备选名1, 备选名2}
-    maps = {
-        'p',  'quad_pos_actual', 'pos_actual';
-        'pd', 'quad_pos_desired', 'pos_desired';
-        'q',  'arm_pos_actual',  'q_actual';
-        'qd', 'arm_pos_desired', 'q_desired';
-        'time', 'time_series', 'tout'
-    };
-    
-    for i = 1:size(maps, 1)
-        std_name = maps{i, 1};
-        % 如果标准名已经存在，跳过
-        if isfield(data, std_name), continue; end
-        
-        % 检查备选名
-        for j = 2:size(maps, 2)
-            alt_name = maps{i, j};
-            if isfield(raw, alt_name)
-                data.(std_name) = raw.(alt_name);
-                fprintf('   🔗 映射变量: %s -> %s\n', alt_name, std_name);
-                break;
-            end
-        end
-    end
-end
-
-function [val, val_d, t] = extract_data_values(raw_act, raw_des)
-    % 从timeseries或struct中提取数值
-    t = [];
-    
-    % 处理实际值
-    if isa(raw_act, 'timeseries')
-        val = raw_act.Data;
-        t = raw_act.Time;
-    elseif isstruct(raw_act) && isfield(raw_act, 'signals')
-        val = raw_act.signals.values;
-        if isfield(raw_act, 'time'), t = raw_act.time; end
-    else
-        val = raw_act;
-    end
-    
-    % 处理期望值
-    if isa(raw_des, 'timeseries')
-        val_d = raw_des.Data;
-    elseif isstruct(raw_des) && isfield(raw_des, 'signals')
-        val_d = raw_des.signals.values;
-    else
-        val_d = raw_des;
-    end
-end

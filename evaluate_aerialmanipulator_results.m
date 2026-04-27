@@ -101,8 +101,8 @@ if isfield(metrics, 'position_axis_max')
         (isfield(metrics, 'attitude_peak') && metrics.attitude_peak > pi/2);
 end
 
-metrics.mode3_pass = false;
-metrics.mode5_pass = false;
+metrics.mode1_pass = false;
+metrics.mode2_pass = false;
 if isfield(metrics, 'position_axis_max') && isfield(metrics, 'arm_axis_max')
     eso_pass = true;
     if isfield(metrics, 'eso_position_axis_max_error_m')
@@ -114,10 +114,10 @@ if isfield(metrics, 'position_axis_max') && isfield(metrics, 'arm_axis_max')
         eso_pass && ...
         ~metrics.is_divergent;
     if isfield(config, 'input') && isfield(config.input, 'mode')
-        if config.input.mode == 3
-            metrics.mode3_pass = pass_flag;
-        elseif config.input.mode == 5
-            metrics.mode5_pass = pass_flag;
+        if config.input.mode == 1
+            metrics.mode1_pass = pass_flag;
+        elseif config.input.mode == 2
+            metrics.mode2_pass = pass_flag;
         end
     end
 end
