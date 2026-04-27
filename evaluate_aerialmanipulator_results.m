@@ -11,6 +11,8 @@ end
 f = get_signal_data(signals, 'f');
 tau = get_signal_data(signals, 'tau');
 tau_arm = get_signal_data(signals, 'tau_arm');
+[h_v_true, h_v_est] = pair_signal(signals, 'h_v_true', 'h_v_est');
+[p_true_for_eso, p_hat] = pair_signal(signals, 'p_true', 'p_hat');
 
 metrics = struct();
 
@@ -19,6 +21,7 @@ if ~isempty(p_actual) && ~isempty(p_desired)
     pos_error_abs = abs(pos_error);
     pos_error_norm = vecnorm(pos_error, 2, 2);
 
+    metrics.position_axis_mean = mean(pos_error_abs, 1);
     metrics.position_axis_max = max(pos_error_abs, [], 1);
     metrics.position_axis_rms = sqrt(mean(pos_error .^ 2, 1));
     metrics.position_rms = sqrt(mean(pos_error_norm .^ 2));
@@ -29,6 +32,26 @@ if ~isempty(p_actual) && ~isempty(p_desired)
     metrics.disturbance_amp_position = amplitude_at_frequency(pos_error_norm, config);
     metrics.track_overshoot = overshoot_ratio(p_actual(:,3), p_desired(:,3));
     metrics.track_settling_time = settling_time(p_actual(:,3), p_desired(:,3), 0.02, get_sample_time(config));
+end
+
+if ~isempty(h_v_true) && ~isempty(h_v_est)
+    eso_error = h_v_est - h_v_true;
+    eso_error_abs = abs(eso_error);
+
+    metrics.eso_disturbance_axis_mean_error = mean(eso_error_abs, 1);
+    metrics.eso_disturbance_axis_max_error = max(eso_error_abs, [], 1);
+    metrics.eso_disturbance_mean_error = mean(vecnorm(eso_error, 2, 2));
+    metrics.eso_disturbance_max_error = max(vecnorm(eso_error, 2, 2));
+end
+
+if ~isempty(p_true_for_eso) && ~isempty(p_hat)
+    eso_position_error = p_hat - p_true_for_eso;
+    eso_position_error_abs = abs(eso_position_error);
+
+    metrics.eso_position_axis_mean_error_m = mean(eso_position_error_abs, 1);
+    metrics.eso_position_axis_max_error_m = max(eso_position_error_abs, [], 1);
+    metrics.eso_position_mean_error_m = mean(vecnorm(eso_position_error, 2, 2));
+    metrics.eso_position_max_error_m = max(vecnorm(eso_position_error, 2, 2));
 end
 
 if ~isempty(att)
@@ -68,7 +91,14 @@ end
 metrics.mode3_pass = false;
 metrics.mode5_pass = false;
 if isfield(metrics, 'position_axis_max') && isfield(metrics, 'arm_axis_max')
-    pass_flag = all(metrics.position_axis_max < 0.05) && all(metrics.arm_axis_max < 0.10) && ...
+    eso_pass = true;
+    if isfield(metrics, 'eso_position_axis_max_error_m')
+        eso_pass = all(metrics.eso_position_axis_max_error_m < 0.01);
+    end
+    pass_flag = all(metrics.position_axis_mean < 0.02) && ...
+        all(metrics.position_axis_max < 0.04) && ...
+        all(metrics.arm_axis_max < 0.10) && ...
+        eso_pass && ...
         ~metrics.is_divergent;
     if isfield(config, 'input') && isfield(config.input, 'mode')
         if config.input.mode == 3

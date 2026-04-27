@@ -24,13 +24,13 @@ sizes.DirFeedthrough = 1;
 sizes.NumSampleTimes = 1;
 sys = simsizes(sizes);
 
-x0 = [0; 0; 3; 0; 0; 0; 0; 0; 0];
+x0 = [0; 0; 5; 0; 0; 0; 0; 0; 0];
 str = [];
 ts = [0.01 0];
 
 function sys = mdlUpdate(x,u)
 p_measured = u(1:3);
-u_v = u(4:6);
+f_world = u(4:6);
 
 p_hat = x(1:3);
 v_hat = x(4:6);
@@ -40,10 +40,12 @@ params = common_functions('get_system_params');
 p_error = p_measured - p_hat;
 w_p = params.w_p;
 dt = params.dt;
+total_mass = params.m_B + params.m_M;
+u_v = f_world / total_mass - [0; 0; params.g];
 
 p_hat_next = p_hat + dt * (v_hat + 3 * diag(w_p) * p_error);
-v_hat_next = v_hat + dt * (u_v + h_v_hat + 3 * diag(w_p.^2) * p_error);
-h_v_hat_next = h_v_hat + dt * (diag(w_p.^3) * p_error);
+v_hat_next = v_hat + dt * (u_v - h_v_hat + 3 * diag(w_p.^2) * p_error);
+h_v_hat_next = h_v_hat - dt * (diag(w_p.^3) * p_error);
 
 sys = [p_hat_next; v_hat_next; h_v_hat_next];
 
