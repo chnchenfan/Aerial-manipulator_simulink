@@ -24,9 +24,12 @@ The logged `h_v_true` / `h_v_est` channel is a disturbance-acceleration estimate
 ## Repository Contents
 
 - `AerialManipulatorSystem.slx` - main Simulink model.
+- `AerialManipulatorSystem_PX4Like.slx` - copied model used for the conservative PX4-like baseline comparison.
 - `common_functions.m` - shared physical parameters, geometry, and utility functions.
 - `sfunc_*` files - controller, observer, planner, input, and dynamics S-functions.
 - `run_aerialmanipulator_experiment.m` - runs one configured simulation and saves metrics.
+- `run_px4_like_comparison.m` - runs fresh `paper_eso` and `px4_like` mode 3/mode 5 comparisons.
+- `plot_px4_like_comparison.m` - generates ESO vs PX4-like comparison figures and metric summaries.
 - `evaluate_aerialmanipulator_results.m` - computes position, attitude, arm, saturation, and divergence metrics.
 - `run_aerialmanipulator_tuning.m` - evaluates hand-crafted candidate controller settings.
 - `run_aerialmanipulator_acceptance_suite.m` - runs representative validation scenarios.
@@ -149,6 +152,25 @@ plot_mode3_mode5_report
 ```
 
 This writes PNG figures and `mode3_mode5_report_metrics.txt` into `figures/`.
+
+## PX4-like Baseline Comparison
+
+The PX4-like baseline is an in-project comparison controller, not PX4 stock firmware and not a SITL/Gazebo result. It keeps the same plant, manipulator, mode 3/mode 5 references, measurement noise/delay, logging, and metric pipeline as the paper ESO controller. The copied model `AerialManipulatorSystem_PX4Like.slx` removes the position and attitude ESO subsystems, feeds zero vectors into legacy observer input ports, and replaces the UAV position/thrust stage with `sfunc_px4_like_controller.m`; `sfunc_attitude_controller.m` selects a PX4-like attitude/rate path when `config.controller.type = 'px4_like'`.
+
+Run the fresh comparison with:
+
+```matlab
+outputs = run_px4_like_comparison();
+```
+
+This writes result MAT files to `tuning_results/px4_like_comparison/` and comparison figures plus `px4_like_metrics_summary.txt` to `figures/px4_like_comparison/`.
+
+Latest fresh comparison generated on 2026-04-27:
+
+- `paper_eso` mode 3: `position_axis_mean = [0.000588 0.000749 0.001213] m`, `position_axis_max = [0.002810 0.003369 0.004052] m`, `position_rms = 0.0019 m`, `position_max = 0.0045 m`, `arm_axis_max = [0.0423 0.0398 0.0414] rad`, `is_divergent = false`, thrust/torque saturation ratio `0`.
+- `paper_eso` mode 5: `position_axis_mean = [0.000614 0.000758 0.001185] m`, `position_axis_max = [0.002814 0.003310 0.004035] m`, `position_rms = 0.0019 m`, `position_max = 0.0045 m`, `arm_axis_max = [0.0423 0.0406 0.0420] rad`, `is_divergent = false`, thrust/torque saturation ratio `0`.
+- `px4_like` mode 3: `position_axis_mean = [0.001502 0.001915 0.001923] m`, `position_axis_max = [0.005971 0.006147 0.006930] m`, `position_rms = 0.0039 m`, `position_max = 0.0081 m`, `arm_axis_max = [0.0403 0.0412 0.0394] rad`, `is_divergent = false`, thrust/torque saturation ratio `0`.
+- `px4_like` mode 5: `position_axis_mean = [0.001435 0.001925 0.001922] m`, `position_axis_max = [0.004944 0.006132 0.006899] m`, `position_rms = 0.0038 m`, `position_max = 0.0082 m`, `arm_axis_max = [0.0405 0.0395 0.0401] rad`, `is_divergent = false`, thrust/torque saturation ratio `0`.
 
 ## Notes
 

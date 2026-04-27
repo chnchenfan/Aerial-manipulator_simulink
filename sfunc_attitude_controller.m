@@ -5,9 +5,9 @@ switch flag
     case 0
         [sys,x0,str,ts] = mdlInitializeSizes;
     case 2
-        sys = [];
+        sys = mdlUpdate(x,u);
     case 3
-        sys = mdlOutputs(t,u);
+        sys = mdlOutputs(t,x,u);
     case {1,4,9}
         sys = [];
     otherwise
@@ -17,18 +17,38 @@ end
 function [sys,x0,str,ts] = mdlInitializeSizes
 sizes = simsizes;
 sizes.NumContStates  = 0;
-sizes.NumDiscStates  = 0;
+sizes.NumDiscStates  = 3;
 sizes.NumOutputs     = 9;
 sizes.NumInputs      = 27;
 sizes.DirFeedthrough = 1;
 sizes.NumSampleTimes = 1;
 sys = simsizes(sizes);
 
-x0 = [];
+x0 = [0; 0; 0];
 str = [];
 ts = [0.01 0];
 
-function sys = mdlOutputs(t,u)
+function sys = mdlUpdate(x,u)
+if ~is_px4_like_controller()
+    sys = x;
+    return;
+end
+
+omega_current = u(4:6);
+omega_desired = u(7:9);
+Rd_element = u(19:27);
+att_current = u(1:3);
+
+cfg = get_px4_like_attitude_config();
+params = common_functions('get_system_params');
+Rd = reshape_Rd(Rd_element);
+[rate_sp, ~] = compute_px4_like_rate_sp(att_current, Rd, omega_desired, cfg);
+rate_error = rate_sp - omega_current;
+rate_i_next = x(:) + params.dt * (cfg.rate_i(:) .* rate_error);
+rate_i_next = clamp_vector(rate_i_next, cfg.rate_i_limit(:));
+sys = rate_i_next;
+
+function sys = mdlOutputs(t,x,u)
 att_current = u(1:3);
 omega_current = u(4:6);
 omega_desired = u(7:9);
@@ -38,8 +58,13 @@ omega_d_dot = u(16:18);
 Rd_element = u(19:27);
 
 params = common_functions('get_system_params');
-[tau_control,u_omega,beta_v] = compute_attitude_control(att_current, omega_current, ...
-    Rd_element, omega_desired, omega_d_dot, h_omega_est, q_current, params);
+if is_px4_like_controller()
+    [tau_control,u_omega,beta_v] = compute_px4_like_attitude_control( ...
+        att_current, omega_current, Rd_element, omega_desired, x, params);
+else
+    [tau_control,u_omega,beta_v] = compute_attitude_control(att_current, omega_current, ...
+        Rd_element, omega_desired, omega_d_dot, h_omega_est, q_current, params);
+end
 
 sim_tuning_runtime('log', 'att', t, att_current);
 sim_tuning_runtime('log', 'omega', t, omega_current);
@@ -48,6 +73,72 @@ sim_tuning_runtime('log', 'u_omega', t, u_omega);
 sim_tuning_runtime('log', 'beta_v', t, beta_v);
 
 sys = [tau_control;u_omega;beta_v];
+
+function tf = is_px4_like_controller()
+tf = false;
+try
+    config = sim_tuning_runtime('get_config');
+catch
+    config = struct();
+end
+
+if isfield(config, 'controller') && isstruct(config.controller) && ...
+        isfield(config.controller, 'type')
+    tf = strcmpi(config.controller.type, 'px4_like');
+end
+
+function cfg = get_px4_like_attitude_config()
+cfg = struct( ...
+    'att_p', [4.0; 4.0; 1.6], ...
+    'yaw_weight', 0.45, ...
+    'rate_p', [0.75; 0.95; 0.55], ...
+    'rate_i', [0.035; 0.040; 0.018], ...
+    'rate_ff', [0.030; 0.035; 0.012], ...
+    'rate_limit', [2.8; 2.8; 1.6], ...
+    'rate_i_limit', [0.18; 0.18; 0.10], ...
+    'tau_max', [12; 12; 8]);
+
+try
+    config = sim_tuning_runtime('get_config');
+catch
+    config = struct();
+end
+
+if isfield(config, 'controller') && isstruct(config.controller) && ...
+        isfield(config.controller, 'px4_like_attitude')
+    cfg = merge_structs(cfg, config.controller.px4_like_attitude);
+end
+
+function [tau_control,u_omega,beta_v] = compute_px4_like_attitude_control( ...
+    att, omega, Rd_element, omega_d, rate_integral, params)
+cfg = get_px4_like_attitude_config();
+Rd = reshape_Rd(Rd_element);
+[rate_sp, beta_v] = compute_px4_like_rate_sp(att, Rd, omega_d, cfg);
+rate_error = rate_sp - omega;
+
+tau_control = cfg.rate_p(:) .* rate_error + rate_integral(:) + ...
+    cfg.rate_ff(:) .* omega_d;
+tau_control = tau_control + cross(omega, params.M * omega);
+tau_control = clamp_vector(tau_control, cfg.tau_max(:));
+u_omega = params.M_inv * tau_control;
+
+if any(~isfinite(tau_control))
+    warning('PX4-like attitude controller output contains non-finite values, using zeros.');
+    tau_control = [0; 0; 0];
+    u_omega = [0; 0; 0];
+end
+
+function [rate_sp, beta_v] = compute_px4_like_rate_sp(att, Rd, omega_d, cfg)
+[beta_v, ~] = compute_attitude_error_quaternion(att, Rd);
+weighted_error = beta_v(:);
+weighted_error(3) = cfg.yaw_weight * weighted_error(3);
+rate_sp = -2 * cfg.att_p(:) .* weighted_error + omega_d(:);
+rate_sp = clamp_vector(rate_sp, cfg.rate_limit(:));
+
+function Rd = reshape_Rd(Rd_element)
+Rd = [Rd_element(1) Rd_element(4) Rd_element(7);
+      Rd_element(2) Rd_element(5) Rd_element(8);
+      Rd_element(3) Rd_element(6) Rd_element(9)];
 
 function [tau_control,u_omega,beta_v] = compute_attitude_control(att, omega, Rd_element, ...
     omega_d, omega_d_dot, h_omega_est, q, params)
@@ -174,3 +265,7 @@ function R_tilde_dot = compute_R_tilde_derivative(R, R_d, omega, omega_d)
 R_dot = R * common_functions('skew_symmetric', omega);
 R_d_dot = R_d * common_functions('skew_symmetric', omega_d);
 R_tilde_dot = R_d_dot' * R + R_d' * R_dot;
+
+function y = clamp_vector(x, limit_vec)
+limit_vec = limit_vec(:);
+y = max(-limit_vec, min(limit_vec, x(:)));
