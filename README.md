@@ -1,90 +1,148 @@
-# Aerial Manipulator Simulink
+# Aerial Manipulator Simulink S-Function Controllers
 
-This repository contains a MATLAB/Simulink simulation project for an aerial manipulator system. It includes the main Simulink model, controller S-functions, experiment runners, evaluation utilities, plotting scripts, and validation utilities for controller tuning experiments.
+This repository implements and evaluates two aerial-manipulator control baselines in MATLAB/Simulink using S-functions:
 
-## Overview
+- An **ESO-based aerial manipulator controller**, including extended state observers, decoupled aerial-manipulator dynamics construction and compensation, and nonlinear backstepping-style control laws.
+- A **PX4-like comparison controller**, including cascaded position/velocity PID, thrust-vector attitude reference generation, and an SO(3)-based attitude/rate PID path adapted to the current plant interface.
 
-The project models and evaluates an aerial manipulator with coupled quadrotor and arm dynamics. The simulation workflow is built around `AerialManipulatorSystem.slx` and MATLAB scripts that run repeatable experiment scenarios, collect logged signals, and compute tracking metrics.
+The project uses Simulink S-functions to keep the controller, observer, planner, manipulator dynamics, quadrotor dynamics, logging, and evaluation logic reproducible inside one local simulation framework. Controller parameters were tuned with local Codex-based skills that automate repeated Simulink trials, metric extraction, and parameter search. Those skills are still under testing and are not included in this repository yet; they may be cleaned up and open-sourced later.
 
-The current strict validation target is evaluated per translation axis:
+The PX4-like controller in this repository is not PX4 stock firmware, and it is not a PX4 SITL/HITL/Gazebo result. It is an in-project baseline designed to use the same plant, references, measurement perturbations, logging, and metrics as the ESO controller.
 
-```matlab
-mean(abs(p_actual - p_desired), 1) < [0.02 0.02 0.02]
-max(abs(p_actual - p_desired), [], 1) < [0.04 0.04 0.04]
+## Project Structure
+
+```text
+.
++-- AerialManipulatorSystem.slx
+|   +-- sfunc_input.m                         # mode/reference generator
+|   +-- sfunc_position_eso.m                  # position ESO
+|   +-- sfunc_position_controller.m           # ESO-based position/backstepping controller
+|   +-- sfunc_Tranformation.m                 # thrust-vector to attitude reference conversion
+|   +-- sfunc_attitude_eso.m                  # attitude ESO
+|   +-- sfunc_attitude_controller.m           # ESO branch and PX4-like attitude/rate branch
+|   +-- sfunc_quadrotor_dynamics.m            # quadrotor dynamics with manipulator coupling terms
+|   +-- sfunc_arm_controller.m                # manipulator controller
+|   +-- sfunc_arm_dynamics.m                  # Delta-arm dynamics model
+|   +-- sfunc_cooperative_planner.m           # cooperative planning helpers
+|   +-- sfunc_tracking_differentiator.m       # tracking differentiator blocks
+|
++-- AerialManipulatorSystem_PX4Like.slx
+|   +-- sfunc_input.m                         # same input/reference generator
+|   +-- sfunc_px4_like_controller.m           # PX4-like position/velocity/thrust stage
+|   +-- sfunc_Tranformation.m                 # same thrust-vector attitude reference conversion
+|   +-- sfunc_attitude_controller.m           # PX4-like SO(3) attitude/rate PID branch
+|   +-- sfunc_quadrotor_dynamics.m            # same quadrotor plant
+|   +-- sfunc_arm_controller.m                # same arm controller
+|   +-- sfunc_arm_dynamics.m                  # same arm plant
+|
++-- Experiment and evaluation scripts
+|   +-- run_aerialmanipulator_experiment.m    # run one configured simulation
+|   +-- run_aerialmanipulator_acceptance_suite.m
+|   +-- run_aerialmanipulator_tuning.m
+|   +-- run_px4_like_comparison.m             # fresh ESO vs PX4-like comparison runs
+|   +-- evaluate_aerialmanipulator_results.m  # metrics and pass/fail flags
+|   +-- sim_tuning_runtime.m                  # runtime config and signal logging
+|   +-- merge_structs.m
+|
++-- Plotting and reporting
+|   +-- plot_mode1_data.m
+|   +-- plot_mode2_data.m
+|   +-- plot_mode3_data.m
+|   +-- plot_mode5_data.m
+|   +-- plot_mode3_mode5_report.m
+|   +-- plot_px4_like_comparison.m
+|   +-- figures/
+|       +-- px4_like_comparison/
+|
++-- Shared assets and reference data
+|   +-- common_functions.m                    # parameters, geometry, rotations, Delta kinematics
+|   +-- baseline_data.mat
+|   +-- baseline_vars.mat
+|   +-- ESO-Based_Robust_and_High-Precision_Tracking_Control_for_Aerial_Manipulation.pdf
+|
++-- Generated results
+    +-- tuning_results/                       # ignored by Git; local MAT/JSON trial outputs
 ```
 
-The ESO position-state tracking guardrail is:
+`AerialManipulatorSystem.slx` is the main ESO-based model. It keeps both position and attitude ESO subsystems active and uses the ESO-based UAV controller chain.
+
+`AerialManipulatorSystem_PX4Like.slx` is a copied comparison model. Its position and attitude ESO subsystems are removed, legacy observer input ports are fed with zero vectors, and the UAV control path is replaced by the PX4-like baseline. The plant, manipulator, input modes, measurement model, logging, and evaluation scripts remain shared.
+
+## Workflow and Usage
+
+Open MATLAB in the repository root and add the project to the path if needed:
 
 ```matlab
-max(abs(p_hat - p_true), [], 1) < [0.01 0.01 0.01]
+addpath(pwd)
 ```
 
-The logged `h_v_true` / `h_v_est` channel is a disturbance-acceleration estimate in `m/s^2`, not a meter-valued position error.
-
-## Repository Contents
-
-- `AerialManipulatorSystem.slx` - main Simulink model.
-- `AerialManipulatorSystem_PX4Like.slx` - copied model used for the conservative PX4-like baseline comparison.
-- `common_functions.m` - shared physical parameters, geometry, and utility functions.
-- `sfunc_*` files - controller, observer, planner, input, and dynamics S-functions.
-- `run_aerialmanipulator_experiment.m` - runs one configured simulation and saves metrics.
-- `run_px4_like_comparison.m` - runs fresh `paper_eso` and `px4_like` mode 3/mode 5 comparisons.
-- `plot_px4_like_comparison.m` - generates ESO vs PX4-like comparison figures and metric summaries.
-- `evaluate_aerialmanipulator_results.m` - computes position, attitude, arm, saturation, and divergence metrics.
-- `run_aerialmanipulator_tuning.m` - evaluates hand-crafted candidate controller settings.
-- `run_aerialmanipulator_acceptance_suite.m` - runs representative validation scenarios.
-- `plot_mode*_data.m` - plotting and analysis helpers.
-
-Generated tuning outputs are intentionally ignored by Git under `tuning_results/`. Local Codex skills and autotuning helper memory are also kept out of the repository.
-
-## Tuning Workflow
-
-The repository keeps the reproducible simulation and evaluation code in Git. Local-only Codex skills or scratch autotuning helpers can be used during development, but they are intentionally excluded from this GitHub repository so generated memory, prompts, and trial-specific helper code do not become part of the public project history.
-
-For tracked tuning experiments, use the MATLAB entrypoints in this repository, inspect the fresh metrics, and only persist controller defaults after validation passes.
-
-## Basic Usage
-
-Open MATLAB in the repository root, then run:
+Run a default ESO-based experiment:
 
 ```matlab
 result = run_aerialmanipulator_experiment();
 ```
 
-Run the acceptance suite:
+Run a configured experiment:
 
 ```matlab
-summary = run_aerialmanipulator_acceptance_suite();
+config = struct();
+config.input = struct('mode', 3);
+config.sim = struct('model_name', 'AerialManipulatorSystem', 'stop_time', 100);
+config.output = struct('label', 'paper_eso_mode3', ...
+    'save_dir', fullfile(pwd, 'tuning_results'), ...
+    'save_results', true);
+result = run_aerialmanipulator_experiment(config);
 ```
 
-Run the existing candidate tuning script:
+Run the fresh ESO vs PX4-like comparison:
 
 ```matlab
-summary = run_aerialmanipulator_tuning();
+outputs = run_px4_like_comparison();
 ```
+
+This runs `paper_eso` and `px4_like` in mode 3 and mode 5, writes result files under `tuning_results/px4_like_comparison/`, and generates comparison figures plus `px4_like_metrics_summary.txt` under `figures/px4_like_comparison/`.
+
+Generate the current mode 3/mode 5 ESO report figures:
+
+```matlab
+plot_mode3_mode5_report
+```
+
+The local Codex autotuning skill used during development is not uploaded yet. For now, reproducible entrypoints are the MATLAB scripts in this repository. Generated trial data under `tuning_results/` is intentionally ignored by Git.
 
 ## Validation Scenarios
 
-The controller is validated with two representative scenarios. Both scenarios use the same strict translational metrics:
+The validation scenarios are designed to test whether the UAV can maintain accurate position control while the manipulator changes the coupled system dynamics. Both controller families use the same plant, same manipulator motion, same references, same measurement perturbations, same simulation time, and same metric pipeline.
+
+The main position metrics are evaluated per translation axis:
 
 ```matlab
 position_axis_mean = mean(abs(p_actual - p_desired), 1)
-position_axis_max = max(abs(p_actual - p_desired), [], 1)
+position_axis_max  = max(abs(p_actual - p_desired), [], 1)
 ```
 
-The acceptance target is every axis mean `< 0.02 m`, every axis max `< 0.04 m`, ESO position-state max `< 0.01 m`, `arm_axis_max < 0.10 rad`, and no divergent run.
+The current strict target is:
 
-## Dynamics Model Audit
+```matlab
+position_axis_mean < [0.02 0.02 0.02]  % m
+position_axis_max  < [0.04 0.04 0.04]  % m
+arm_axis_max       < [0.10 0.10 0.10]  % rad
+is_divergent == false
+```
 
-The quadrotor translational and rotational dynamics in `sfunc_quadrotor_dynamics.m` follow the paper-level structure: rigid-body position/attitude dynamics plus manipulator coupling terms derived from center-of-mass motion and arm inertia. The ESO bug found during strict validation was not in the plant force equation; it was in `sfunc_position_eso.m`, where the model fed a world-frame force vector in Newtons directly into an ESO state equation that expected acceleration. The ESO now converts `f_world` to nominal acceleration with `f_world / (m_B + m_M) - g` and uses the disturbance compensation sign consistent with the position controller.
+For the ESO controller, an additional observer guardrail is used:
 
-The Delta arm dynamics in `sfunc_arm_dynamics.m` are not an exact reproduction of the paper object. They contain project-specific simplified/empirical terms that the paper does not specify: a diagonal-dominant arm mass matrix, heuristic Coriolis/damping terms, base-coupling saturation, acceleration saturation, measurement noise/delay, and fallback simplified dynamics. Treat this as a simulation plant for controller validation, not as a first-principles paper-faithful Delta-arm model.
+```matlab
+max(abs(p_hat - p_true), [], 1) < [0.01 0.01 0.01]  % m
+```
+
+The logged `h_v_true` / `h_v_est` channel is a disturbance-acceleration estimate in `m/s^2`, not a meter-valued position error.
 
 ### Mode 3: Hover With Arm Motion
 
-Mode 3 is designed to verify whether the UAV can maintain a stable hover while the manipulator moves periodically. This scenario stresses the coupled UAV-arm dynamics: the arm motion changes the mass distribution and produces disturbance forces that the position controller and ESO must reject. For this reason, the experiment holds the UAV near `[0, 0, 5] m` while the three arm joints follow sinusoidal references.
+Mode 3 verifies whether the UAV can hold a stable hover while the manipulator moves periodically. This scenario stresses disturbance rejection because arm motion changes the mass distribution and introduces coupling forces and torques. The UAV reference is near `[0, 0, 5] m`, and the three manipulator joints follow sinusoidal references.
 
-Realistic sensing imperfections are enabled through the empirical measurement model:
+Enabled measurement perturbations:
 
 - Quadrotor measurement delay: `1` sample, approximately `0.010 s`.
 - Arm measurement delay: `0` samples in the current validation run.
@@ -95,87 +153,58 @@ Realistic sensing imperfections are enabled through the empirical measurement mo
 - Arm position noise standard deviation: `0.001875 rad`.
 - Arm velocity noise standard deviation: `0.00525 rad/s`.
 - Arm acceleration noise standard deviation: `0.00750 rad/s^2`.
-- Bias random walk, quantization, and colored-noise shaping are enabled in the measurement configuration.
+- Bias random walk, quantization, and colored-noise shaping are enabled by the empirical measurement model.
 
-The current validation does not enable delay jitter, packet dropout, wind gusts, actuator faults, motor saturation faults, payload mass variation, sensor outages, or contact/collision disturbances. These remain useful future robustness cases.
+Not enabled in the current validation:
 
-Final fresh validation result:
+- Delay jitter.
+- Packet dropout.
+- Wind gusts.
+- Actuator faults.
+- Motor saturation fault injection.
+- Payload mass variation.
+- Sensor outages.
+- Contact or collision disturbances.
 
-- Axis mean position error: `[0.000588, 0.000749, 0.001213] m`.
-- Axis max position error: `[0.002810, 0.003369, 0.004052] m`.
-- ESO position max error: `[0.003841, 0.003631, 0.004569] m`.
-- Maximum arm tracking error norm: `0.067859 rad`.
-- Divergence flag: `false`.
+Latest fresh comparison results:
 
-Figures:
-
-- ![Mode 3 UAV position tracking](figures/mode3_uav_position_tracking.png)
-- ![Mode 3 noise and delay PSD](figures/mode3_noise_delay_psd.png)
-- ![Mode 3 arm tracking](figures/mode3_arm_tracking.png)
-- ![Mode 3 3D mean position error](figures/mode3_uav_3d_mean_error.png)
-- ![Mode 3 ESO disturbance estimate](figures/mode3_eso_disturbance_estimate.png)
-- ![Mode 3 ESO disturbance estimation error](figures/mode3_eso_disturbance_error.png)
+| Controller | Axis mean position error (m) | Axis max position error (m) | Position RMS (m) | Position max (m) | Arm axis max (rad) | Divergent |
+| --- | --- | --- | ---: | ---: | --- | --- |
+| `paper_eso` | `[0.000588 0.000749 0.001213]` | `[0.002810 0.003369 0.004052]` | `0.001904` | `0.004532` | `[0.042269 0.039801 0.041402]` | `false` |
+| `px4_like` | `[0.001502 0.001915 0.001923]` | `[0.005971 0.006147 0.006930]` | `0.003861` | `0.008115` | `[0.040316 0.041182 0.039375]` | `false` |
 
 ### Mode 5: Square Tracking With Arm Motion
 
-Mode 5 is designed to verify whether the UAV can perform horizontal trajectory tracking while the manipulator is moving. Compared with mode 3, this scenario adds translational motion and corner transitions, so it tests both disturbance rejection and trajectory-following performance. The UAV tracks a square-like planar mission around the hover height while the arm follows the same sinusoidal joint-motion pattern.
+Mode 5 verifies whether the UAV can track a horizontal square-like trajectory while the manipulator moves. Compared with mode 3, it adds translational motion and corner transitions, so it tests tracking performance and disturbance rejection at the same time. The reference starts at the hover height (`z = 5 m`) to avoid an artificial initial-condition mismatch.
 
-The mode 5 reference starts at the plant's hover height (`z = 5 m`) so that the metric measures controller tracking performance rather than an artificial initial-condition mismatch. Earlier runs exposed this issue: the model started at `5 m` while the reference started at `0 m`, producing a non-controller `5 m` initial error. The current scenario keeps the trajectory at the hover height from `t = 0`.
+Mode 5 uses the same empirical measurement perturbations as mode 3. The same unmodeled robustness cases, such as wind, dropout, actuator faults, payload changes, and collision/contact disturbances, are not enabled.
 
-The same empirical measurement perturbations are used as in mode 3: measurement noise, bias walk, quantization, colored-noise shaping, and the configured quadrotor delay. Delay jitter, dropout, wind, actuator faults, payload changes, and collision/contact disturbances are not enabled in this validation.
+Latest fresh comparison results:
 
-Final fresh validation result:
+| Controller | Axis mean position error (m) | Axis max position error (m) | Position RMS (m) | Position max (m) | Arm axis max (rad) | Divergent |
+| --- | --- | --- | ---: | ---: | --- | --- |
+| `paper_eso` | `[0.000614 0.000758 0.001214]` | `[0.002841 0.003350 0.004006]` | `0.001919` | `0.004537` | `[0.042257 0.040552 0.042022]` | `false` |
+| `px4_like` | `[0.001435 0.001925 0.001922]` | `[0.004944 0.006132 0.006899]` | `0.003829` | `0.008174` | `[0.040492 0.039502 0.040065]` | `false` |
 
-- Axis mean position error: `[0.001006, 0.001538, 0.000626] m`.
-- Axis max position error: `[0.006264, 0.006796, 0.002616] m`.
-- ESO position max error: `[0.005003, 0.005467, 0.003485] m`.
-- Maximum arm tracking error norm: `0.068300 rad`.
-- Divergence flag: `false`.
+The PX4-like comparison also reports zero thrust saturation ratio and zero torque saturation ratio in the latest fresh runs.
 
-Figures:
+## Dynamics Model Notes
 
-- ![Mode 5 UAV position tracking](figures/mode5_uav_position_tracking.png)
-- ![Mode 5 noise and delay PSD](figures/mode5_noise_delay_psd.png)
-- ![Mode 5 arm tracking](figures/mode5_arm_tracking.png)
-- ![Mode 5 3D mean position error](figures/mode5_uav_3d_mean_error.png)
-- ![Mode 5 ESO disturbance estimate](figures/mode5_eso_disturbance_estimate.png)
-- ![Mode 5 ESO disturbance estimation error](figures/mode5_eso_disturbance_error.png)
+The quadrotor translational and rotational dynamics in `sfunc_quadrotor_dynamics.m` follow the paper-level rigid-body structure and include manipulator coupling terms derived from center-of-mass motion and arm inertia.
 
-The PSD figures show the spectrum of measurement residuals and delay-induced residuals. They are diagnostic plots for the configured sensor model; the simulation does not currently log physically separated raw noise and pure delay channels.
+The Delta-arm plant in `sfunc_arm_dynamics.m` is a project-specific simulation model rather than an exact first-principles reproduction of every paper detail. It includes simplified/empirical terms such as a diagonal-dominant arm mass matrix, heuristic Coriolis/damping terms, base-coupling saturation, acceleration saturation, measurement noise/delay, and fallback simplified dynamics. Treat it as a simulation plant for controller validation.
 
-## Reproducing The Figures
+## Future Work
 
-The report figures were generated from the final fresh validation files under `tuning_results/final_default_validation/`:
-
-```matlab
-plot_mode3_mode5_report
-```
-
-This writes PNG figures and `mode3_mode5_report_metrics.txt` into `figures/`.
-
-## PX4-like Baseline Comparison
-
-The PX4-like baseline is an in-project comparison controller, not PX4 stock firmware and not a SITL/Gazebo result. It keeps the same plant, manipulator, mode 3/mode 5 references, measurement noise/delay, logging, and metric pipeline as the paper ESO controller. The copied model `AerialManipulatorSystem_PX4Like.slx` removes the position and attitude ESO subsystems, feeds zero vectors into legacy observer input ports, and replaces the UAV position/thrust stage with `sfunc_px4_like_controller.m`; `sfunc_attitude_controller.m` selects a PX4-like attitude/rate path when `config.controller.type = 'px4_like'`.
-
-Run the fresh comparison with:
-
-```matlab
-outputs = run_px4_like_comparison();
-```
-
-This writes result MAT files to `tuning_results/px4_like_comparison/` and comparison figures plus `px4_like_metrics_summary.txt` to `figures/px4_like_comparison/`.
-
-Latest fresh comparison generated on 2026-04-27:
-
-- `paper_eso` mode 3: `position_axis_mean = [0.000588 0.000749 0.001213] m`, `position_axis_max = [0.002810 0.003369 0.004052] m`, `position_rms = 0.0019 m`, `position_max = 0.0045 m`, `arm_axis_max = [0.0423 0.0398 0.0414] rad`, `is_divergent = false`, thrust/torque saturation ratio `0`.
-- `paper_eso` mode 5: `position_axis_mean = [0.000614 0.000758 0.001185] m`, `position_axis_max = [0.002814 0.003310 0.004035] m`, `position_rms = 0.0019 m`, `position_max = 0.0045 m`, `arm_axis_max = [0.0423 0.0406 0.0420] rad`, `is_divergent = false`, thrust/torque saturation ratio `0`.
-- `px4_like` mode 3: `position_axis_mean = [0.001502 0.001915 0.001923] m`, `position_axis_max = [0.005971 0.006147 0.006930] m`, `position_rms = 0.0039 m`, `position_max = 0.0081 m`, `arm_axis_max = [0.0403 0.0412 0.0394] rad`, `is_divergent = false`, thrust/torque saturation ratio `0`.
-- `px4_like` mode 5: `position_axis_mean = [0.001435 0.001925 0.001922] m`, `position_axis_max = [0.004944 0.006132 0.006899] m`, `position_rms = 0.0038 m`, `position_max = 0.0082 m`, `arm_axis_max = [0.0405 0.0395 0.0401] rad`, `is_divergent = false`, thrust/torque saturation ratio `0`.
+- Replace or augment the current hand-coded plant with a Simscape-based controlled object model for higher-fidelity multibody dynamics.
+- Explore MATLAB/Simulink PX4 HITL/SITL workflows if true PX4 firmware-in-the-loop validation is required.
+- Add Gazebo co-simulation when scene-level sensors, contact, collision, or environment interaction become important.
+- Extend robustness validation to include wind gusts, delay jitter, packet dropout, payload variation, motor/actuator faults, and sensor outages.
+- Clean up, document, and eventually open-source the Codex-based autotuning skills after the workflow is more stable.
 
 ## Notes
 
 - MATLAB/Simulink is required.
 - Large generated simulation artifacts should stay out of Git.
-- Local Codex skill folders are ignored and should be kept on the local machine unless they are intentionally prepared for publication.
-- The current autotuning workflow has already reduced mode 5 instability substantially, but the final `0.05 m` target still requires further tuning before parameter defaults should be persisted.
+- `tuning_results/` is local output and is ignored by Git.
 - The included paper PDF provides background for the ESO-based aerial manipulation controller design.
