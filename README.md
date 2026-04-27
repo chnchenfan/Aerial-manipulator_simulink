@@ -53,6 +53,83 @@ Run the existing candidate tuning script:
 summary = run_aerialmanipulator_tuning();
 ```
 
+## Validation Scenarios
+
+The controller is validated with two representative scenarios. Both scenarios use the same primary metric:
+
+```matlab
+position_mean_error_m = mean(vecnorm(p_actual - p_desired, 2, 2))
+```
+
+The acceptance target is `position_mean_error_m < 0.05 m`. Arm tracking is monitored with a guardrail of `arm_axis_max < 0.10 rad`, and divergent runs are rejected.
+
+### Mode 3: Hover With Arm Motion
+
+Mode 3 is designed to verify whether the UAV can maintain a stable hover while the manipulator moves periodically. This scenario stresses the coupled UAV-arm dynamics: the arm motion changes the mass distribution and produces disturbance forces that the position controller and ESO must reject. For this reason, the experiment holds the UAV near `[0, 0, 5] m` while the three arm joints follow sinusoidal references.
+
+Realistic sensing imperfections are enabled through the empirical measurement model:
+
+- Quadrotor measurement delay: `1` sample, approximately `0.010 s`.
+- Arm measurement delay: `0` samples in the current validation run.
+- Position noise standard deviation: `0.000825 m`.
+- Velocity noise standard deviation: `0.001875 m/s`.
+- Attitude noise standard deviation: `0.000375 rad`.
+- Angular velocity noise standard deviation: `0.0013125 rad/s`.
+- Arm position noise standard deviation: `0.001875 rad`.
+- Arm velocity noise standard deviation: `0.00525 rad/s`.
+- Arm acceleration noise standard deviation: `0.00750 rad/s^2`.
+- Bias random walk, quantization, and colored-noise shaping are enabled in the measurement configuration.
+
+The current validation does not enable delay jitter, packet dropout, wind gusts, actuator faults, motor saturation faults, payload mass variation, sensor outages, or contact/collision disturbances. These remain useful future robustness cases.
+
+Final fresh validation result:
+
+- Mean 3D position error: `0.034330 m`.
+- Maximum arm tracking error norm: `0.067859 rad`.
+- Divergence flag: `false`.
+
+Figures:
+
+- ![Mode 3 UAV position tracking](figures/mode3_uav_position_tracking.png)
+- ![Mode 3 noise and delay PSD](figures/mode3_noise_delay_psd.png)
+- ![Mode 3 arm tracking](figures/mode3_arm_tracking.png)
+- ![Mode 3 3D mean position error](figures/mode3_uav_3d_mean_error.png)
+- ![Mode 3 ESO disturbance estimate](figures/mode3_eso_disturbance_estimate.png)
+
+### Mode 5: Square Tracking With Arm Motion
+
+Mode 5 is designed to verify whether the UAV can perform horizontal trajectory tracking while the manipulator is moving. Compared with mode 3, this scenario adds translational motion and corner transitions, so it tests both disturbance rejection and trajectory-following performance. The UAV tracks a square-like planar mission around the hover height while the arm follows the same sinusoidal joint-motion pattern.
+
+The mode 5 reference starts at the plant's hover height (`z = 5 m`) so that the metric measures controller tracking performance rather than an artificial initial-condition mismatch. Earlier runs exposed this issue: the model started at `5 m` while the reference started at `0 m`, producing a non-controller `5 m` initial error. The current scenario keeps the trajectory at the hover height from `t = 0`.
+
+The same empirical measurement perturbations are used as in mode 3: measurement noise, bias walk, quantization, colored-noise shaping, and the configured quadrotor delay. Delay jitter, dropout, wind, actuator faults, payload changes, and collision/contact disturbances are not enabled in this validation.
+
+Final fresh validation result:
+
+- Mean 3D position error: `0.034492 m`.
+- Maximum arm tracking error norm: `0.068300 rad`.
+- Divergence flag: `false`.
+
+Figures:
+
+- ![Mode 5 UAV position tracking](figures/mode5_uav_position_tracking.png)
+- ![Mode 5 noise and delay PSD](figures/mode5_noise_delay_psd.png)
+- ![Mode 5 arm tracking](figures/mode5_arm_tracking.png)
+- ![Mode 5 3D mean position error](figures/mode5_uav_3d_mean_error.png)
+- ![Mode 5 ESO disturbance estimate](figures/mode5_eso_disturbance_estimate.png)
+
+The PSD figures show the spectrum of measurement residuals and delay-induced residuals. They are diagnostic plots for the configured sensor model; the simulation does not currently log physically separated raw noise and pure delay channels.
+
+## Reproducing The Figures
+
+The report figures were generated from the final fresh validation files under `tuning_results/final_default_validation/`:
+
+```matlab
+plot_mode3_mode5_report
+```
+
+This writes PNG figures and `mode3_mode5_report_metrics.txt` into `figures/`.
+
 ## Notes
 
 - MATLAB/Simulink is required.

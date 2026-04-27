@@ -74,15 +74,15 @@ params.g = 9.81;            % m/s²
 % params.w_p = [1.95, 1.95, 2.5];     % 位置ESO带宽 越大越好
 % params.w_o = [1, 1, 2.5];  % 姿态ESO带宽 越小越好
 
-params.Omega_p = diag([1.65, 1.65, 16.5]); % 位置子环增益
-params.K_v = diag([6.2, 6.2, 16.5]); % 速度增益
+params.Omega_p = diag([1.65, 1.65, 7.0]); % 位置子环增益
+params.K_v = diag([6.2, 6.2, 7.0]); % 速度增益
 params.Omega_q = diag([0.5, 1.5, 1.5]); % 姿态子环增益 
 params.K_omega = diag([0.5, 1.5, 1.4]); % 角速度增益
 params.k_beta = 1.9; % 四元数误差增益
 
 % ESO参数 (论文Section VII) 可以补偿刚开始的超调，但是后面又出现超调
-params.w_p = [3.8, 3.4, 3.0]; % 位置ESO带宽 越大越好
-params.w_o = [4.8, 6.2, 6.2]; % 姿态ESO带宽 越小越好
+params.w_p = [3.8, 3.4, 1.2]; % 位置ESO带宽 越大越好
+params.w_o = [4.8, 6.2, 5.2]; % 姿态ESO带宽 越小越好
 
 
 % params.Omega_p = diag([1.75, 1.75, 9.85]); % 位置子环增益

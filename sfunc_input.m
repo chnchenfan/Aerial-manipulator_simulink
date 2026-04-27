@@ -194,12 +194,14 @@ qd = zeros(9,1);
 qdDot = zeros(9,1);
 qdDotDot = zeros(9,1);
 
-takeoff_time = min(max(5.0, 0.25 * T), max(T - 4.0, 5.0));
-takeoff_time = min(takeoff_time, 0.5 * T);
+% The Simulink plant starts at the hover height. Keep mode 5 at that
+% height from t=0 so tracking metrics reflect controller performance,
+% rather than a reference/initial-condition mismatch.
+takeoff_time = 0.0;
 side_x = pos_target(1);
 side_y = pos_target(2);
 
-if t <= takeoff_time
+if takeoff_time > 0 && t <= takeoff_time
     [qd, qdDot, qdDotDot] = build_hover_ramp(t, takeoff_time, z_target, angle_max, omega, arm_ramp_time, arm_active);
     return;
 end

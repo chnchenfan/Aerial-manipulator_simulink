@@ -1,0 +1,6 @@
+Mode 3 mean position error: 0.034330 m
+Mode 3 max arm error: 0.067859 rad
+Mode 3 divergent: 0
+Mode 5 mean position error: 0.034492 m
+Mode 5 max arm error: 0.068300 rad
+Mode 5 divergent: 0
